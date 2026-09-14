@@ -1,0 +1,14 @@
+{
+  "name": "domain-model",
+  "version": "1.0.0",
+  "description": "domain-rule正本の業務概念を値オブジェクト・エンティティ・集約・ドメインイベントへ割り当て、契約つきの候補モデルを書く",
+  "author": {
+    "name": "NaoyaNakamori"
+  },
+  "skills": "./",
+  "metadata": {
+    "harness": {
+      "contractVersion": 1
+    }
+  }
+}

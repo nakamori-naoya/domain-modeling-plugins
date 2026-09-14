@@ -1,0 +1,9 @@
+version: 1
+output_dir: domain-model/candidates
+artifact:
+  kind: domain-model-candidate
+  required_sections: [目的と範囲, 要素一覧, モデル図, 各要素の詳細, 集約の境界, 状態と型の分割, ドメインイベント, BDDとの対応, 捨てた割り当て, 未決, この資料に書かないもの]
+  required_nonempty_sections: [目的と範囲, 要素一覧, モデル図, 各要素の詳細, 集約の境界, 状態と型の分割, ドメインイベント, BDDとの対応, 捨てた割り当て, 未決, この資料に書かないもの]
+instructions:
+  assignment:
+    directive: 正本の索引にある語だけを要素にし、各要素の目的・何でないか・不変条件・操作の契約を埋め、決まらないものは捨てた割り当てか未決へ理由付きで残す

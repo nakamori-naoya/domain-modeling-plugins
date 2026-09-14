@@ -1,0 +1,24 @@
+# OS and language-generated files
+.DS_Store
+__pycache__/
+*.py[cod]
+
+# Repository-root allowlist
+# A new top-level path is ignored until it is explicitly approved here.
+/*
+!/.github/
+!/.agents/
+!/.claude-plugin/
+!/.harness-plugins/
+!/docs/
+!/plugins/
+!/scripts/
+!/shared/
+!/tests/
+!/AGENTS.md
+!/LICENSE
+!/README.md
+!/SECURITY.md
+!/.gitignore
+!/evals/
+!/releases/

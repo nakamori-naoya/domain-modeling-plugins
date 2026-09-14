@@ -1,0 +1,21 @@
+{
+  "name": "domain-modeling",
+  "interface": {
+    "displayName": "Domain Modeling"
+  },
+  "plugins": [
+    {
+      "name": "domain-modeling",
+      "source": {
+        "source": "local",
+        "path": "./plugins"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity",
+      "version": "1.0.0"
+    }
+  ]
+}
