@@ -1,0 +1,25 @@
+{
+  "name": "model-domain",
+  "version": "1.0.0",
+  "description": "domain-rule正本の業務概念を戦術DDDの要素へ割り当て、契約つきのドメインモデル資料を保存する",
+  "skills": "./",
+  "author": {
+    "name": "NaoyaNakamori"
+  },
+  "interface": {
+    "displayName": "Model Domain",
+    "shortDescription": "domain-rule正本の業務概念を戦術DDDの要素へ割り当て、契約つきのドメインモデル資料を保存する",
+    "longDescription": "domain-rule正本の業務概念を戦術DDDの要素へ割り当て、契約つきのドメインモデル資料を保存する",
+    "developerName": "NaoyaNakamori",
+    "category": "Productivity",
+    "capabilities": [
+      "Skills"
+    ],
+    "defaultPrompt": "model-domainを使ってこの作業を進めてください。"
+  },
+  "metadata": {
+    "harness": {
+      "contractVersion": 1
+    }
+  }
+}
