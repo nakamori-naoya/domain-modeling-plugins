@@ -1,0 +1,14 @@
+{
+  "name": "model-domain",
+  "version": "1.0.0",
+  "description": "domain-rule正本の業務概念を戦術DDDの要素へ割り当て、契約つきのドメインモデル資料を保存する",
+  "author": {
+    "name": "NaoyaNakamori"
+  },
+  "skills": "./",
+  "metadata": {
+    "harness": {
+      "contractVersion": 1
+    }
+  }
+}
