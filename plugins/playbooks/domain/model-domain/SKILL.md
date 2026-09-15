@@ -57,34 +57,13 @@ printf '%s\n' "$CFG_FILE"
 
 ## 3. 外部playbookの呼び方
 
-`playbook:`の工程（`settle`と`document`）は、相手の公開契約だけを使って呼ぶ。相手のskill名、工程id、references、config、保存モード名、scriptの引数は使わない。**呼び方は2段だけである。**
-
-### 第1段 — こちらが解決する
-
-相手の`CONTRACT.md`が定める入力schemaで入力YAMLを書く。`contract`・`version`・`output_to`は必ず入れ、`output_to`は自分が用意する絶対pathにする。そのうえで相手の`prepare.sh`を通す。
-
-```bash
-DEP_CFG=$(bash "${.deps.<論理名>.root}/scripts/prepare.sh" "$(pwd)" \
-  --input="<入力YAMLの絶対path>" \
-  --scope="${.resolution.scope_root}" \
-  --bindings="${.resolution.bindings_lock}") || exit 2
-```
-
-標準出力に返る絶対pathが、相手の解決済みYAMLである。空なら工程を実行せず停止する。
-
-### 第2段 — 入口のSKILL.mdへ渡して実行させる
-
-`${.deps.<論理名>.entry}`が相手の入口SKILL.mdである。**第1段で得た`$DEP_CFG`を`CFG_FILE`として渡し**、そのSKILL.mdに従って実行する。入口は相手の契約が選ぶので、相手の公開skill名を知る必要はない。
-
-**相手に`prepare.sh`を再実行させない。** 解決は第1段で終わっている。二度解決すると、こちらが渡した`--input`と、入口playbookが決めた`--scope`・束縛lockが捨てられ、後始末の持ち主も分からなくなる。
-
-相手のrootから他のpath（`scripts/`のそれ以外、`skills/`、`references/`、`config/`）を組み立てない。相手の実行設定の後始末は相手が自分で行う。完了したら`output_to`の絶対pathに書かれた出力YAMLを読む。**相手の内部の記録やログは読まない。**
+`playbook:`の工程（`settle`と`document`）は、相手の公開契約だけを使って呼ぶ。相手のskill名、工程id、references、config、保存モード名、scriptの引数は使わない。呼び方は各公開契約の版に従う。
 
 ### settle（`grill`）
 
-入力に`topic`（正本の題材名）、`context`（`purpose`・`audience`・`boundary`）、`questions`（`{id, question, recommendation}`。推奨は必ず添える）、`grounding`（正本の絶対path）、`output_to`を渡す。**正本と索引から読み取れることは問わない。** 問うのは、正本だけでは一つに決まらない割り当てだけである。何を問うかは[実行指示書](references/execution-guidance.md)の「settleで確かめること」に従い、題材固有の観点は`context`で渡して相手に持ち込ませない。
+`grill`の公開契約が定める入力YAMLを書く。`contract`・`version`・`output_to`は必ず入れ、`output_to`は自分が用意する絶対pathにする。その入力YAMLの絶対pathを`${.deps.grill.entry}`へ直接渡し、公開入口の手順に従う。設定解決や`prepare.sh`は使わない。完了したら`output_to`に書かれた出力YAMLだけを読む。相手のrootから内部pathを組み立てず、内部の記録やログも読まない。
 
-第1段は `bash "${.deps.grill.root}/scripts/prepare.sh"`、第2段は `${.deps.grill.entry}` のSKILL.mdである。
+入力に`topic`（正本の題材名）、`context`（`purpose`・`audience`・`boundary`）、`questions`（`{id, question, recommendation}`。推奨は必ず添える）、`grounding`（正本の絶対path）、`output_to`を渡す。**正本と索引から読み取れることは問わない。** 問うのは、正本だけでは一つに決まらない割り当てだけである。何を問うかは[実行指示書](references/execution-guidance.md)の「settleで確かめること」に従い、題材固有の観点は`context`で渡して相手に持ち込ませない。
 
 出力は`decisions`と`open_questions`の2つだけである。「根拠づけられた入力」は相手の出力ではないので、次の`ground`工程がこちらの側で束ねる。
 
@@ -100,13 +79,11 @@ python3 "${PLUGIN_ROOT}/scripts/ground.py" --config "$CFG_FILE" \
 
 ### document（`write-doc`）
 
-入力の必須は`contract: write-doc/write-doc`、`version: 1`、`material`（**絶対pathの配列**。`assemble`が束ねた素材1つ）、`output_to`である。`document_type`に`${.playbook.document_type}`、`output_format`に`${.playbook.output_format}`を渡す。`references`には[成果物の形](references/deliverable.md)の絶対pathを渡す（こちらが書いた文書だけを渡せる）。
+公開契約v2の入力を`${.deps.write-doc.entry}`へ直接渡す。`material`は`assemble`が束ねた素材を`{kind: file, path: <絶対path>}`としたobject配列にする。`document_type`に`${.playbook.document_type}`を渡し、`references`には[成果物の形](references/deliverable.md)の絶対pathを渡す。
 
-保存先は、新規作成なら`name`（正本のファイル名から`-model`を付けた名前。例: `order.md` → `order-model.md`）、既存資料の更新なら`update_target`（`ground`へ渡した`existing_document_path`）を渡す。この2つは**排他**で、両方を渡しても、どちらも渡さなくても止まる。`output_directory`は、依頼で保存先が明示されたときだけ`name`と一緒に渡す。**依頼に無い保存先を推測して渡さない。**
+保存先は、新規作成なら`output_directory`と`name`（正本のファイル名から`-model`を付けた名前。例: `order.md` → `order-model.md`）、既存資料の更新なら`update_target`（`ground`へ渡した`existing_document_path`）を渡す。両方式は排他である。新規作成先が依頼に無ければ、保存先を推測せず利用者へ確認して停止する。
 
-第1段は `bash "${.deps.write-doc.root}/scripts/prepare.sh"`、第2段は `${.deps.write-doc.entry}` のSKILL.mdである。
-
-出力YAMLは`status`（`completed` | `failed`）、`path`、`document_type`、`output_format`（失敗時は`reason`）を持つ。1回の呼び出しで作る資料は1本だけである。`status: completed`と`path`を確かめてから、次へ進む。
+結果は`status`（`completed` | `failed`）と、成功時の`path`または失敗時の`reason`として直接受け取る。中間YAMLと出力YAMLは作らない。1回の呼び出しで作る資料は1本だけである。`status: completed`と絶対pathを確かめてから次へ進む。
 
 ## 4. 正本を索引にし、割り当てて、検査する
 
