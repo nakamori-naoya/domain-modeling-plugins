@@ -10,4 +10,4 @@
 
 ## 設定
 
-`<repo>/.harness-plugins/domain-model.config.yml`、personal設定、同梱既定の順で最上位の完全な1ファイルを選びます。候補の既定の置き場は`domain-model/candidates`で、playbookの後片付けで削除されます。
+`<repo>/.harness-plugins/domain-model.config.yml`、personal設定、同梱既定の順で最上位の完全な1ファイルを選びます。候補の既定の置き場は`domain-model/candidates`で、完了時の後片付けで削除されます。
