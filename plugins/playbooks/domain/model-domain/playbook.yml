@@ -41,8 +41,6 @@ contract:
   operation_fields: [事前条件, 事後条件, 拒む理由, 発するイベント]
   collaboration_means: [識別子で参照, 値として渡す, ドメインイベント, 呼び手が両方を操作]
   forbidden_sections: [テーブル定義, 論理データモデル図, API, 画面, リポジトリ, 層構成]
-  # データの持ち方の語。要素一覧〜ドメインイベントの節に現れたら落とす（書かないもの・捨てた割り当て・未決は除く）
-  forbidden_words: [記録の列, 履歴, レコード, テーブル, カラム, データベース, DB, 永続化, リポジトリ]
   cleanup:
     delete_after_document: [grounded_input, source_index, candidate_model_path, verified_model_path, material]
     preserve: [domain_model_document_path]
@@ -82,7 +80,7 @@ steps:
 
   - id: verify
     script: scripts/verify.py
-    purpose: 節と順序、正本に無い語の要素、要素ごとの必須項目、操作の契約、モデル図のクラスと要素の一致、BDDの対応の過不足を検査し、通った候補だけを返す
+    purpose: 節と順序、正本に無い要素名、要素ごとの必須項目、操作の契約、モデル図のクラスと要素の一致、BDDの対応の過不足を検査し、通った候補だけを返す
     needs: [candidate_model_path, source_index]
     provides: [verified_model_path]
 

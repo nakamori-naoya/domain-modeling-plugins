@@ -107,9 +107,9 @@ expect_stderr "「### 集約どうしの関係」が無い" python3 "$PB/scripts
 # 負例2d: 必須項目（####）が無い
 sed '/^#### 協働相手$/,/^$/d' "$FIX/domain-model.md" > "$TMP/model-noitem.md"
 expect_stderr "必須項目（####）が無いか空" python3 "$PB/scripts/verify.py" --config "$TMP/resolved.yml" --candidate "$TMP/model-noitem.md" --source-index "$TMP/index.json"
-# 負例2g: データの持ち方の語
+# 語の存在だけでは責務境界を判定しない。同じ語が業務上の固有語か実装詳細かは意味評価へ残す。
 sed 's/^会議室、利用開始、利用終了$/会議室、利用開始、利用終了のレコード/' "$FIX/domain-model.md" > "$TMP/model-dbword.md"
-expect_stderr "データの持ち方の語がある" python3 "$PB/scripts/verify.py" --config "$TMP/resolved.yml" --candidate "$TMP/model-dbword.md" --source-index "$TMP/index.json"
+expect_ok python3 "$PB/scripts/verify.py" --config "$TMP/resolved.yml" --candidate "$TMP/model-dbword.md" --source-index "$TMP/index.json"
 # 負例3: 節の順序を入れ替える（未決を先頭へ）
 python3 - "$FIX/domain-model.md" "$TMP/model-order.md" <<'PY'
 import sys, re

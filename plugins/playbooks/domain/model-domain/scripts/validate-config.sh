@@ -17,7 +17,6 @@ jq -e '
   .contract.operation_fields==["事前条件","事後条件","拒む理由","発するイベント"] and
   .contract.collaboration_means==["識別子で参照","値として渡す","ドメインイベント","呼び手が両方を操作"] and
   (.contract.forbidden_sections|length)>0 and
-  (.contract.forbidden_words|length)>0 and
   .contract.cleanup.delete_after_document==["grounded_input","source_index","candidate_model_path","verified_model_path","material"] and
   .contract.cleanup.preserve==["domain_model_document_path"] and
   [.steps[].id]==["settle","ground","index-source","assign","verify","assemble","document","cleanup"] and

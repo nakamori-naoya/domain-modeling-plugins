@@ -4,7 +4,7 @@
 検査するのは述語であって、モデルの良し悪しではない。通ったときに言えるのは次だけである。
 
   - 節と順序が契約と一致し、どの節も空でない
-  - 実装の節（テーブル定義・API など）が混入せず、要素〜ドメインイベントの節にデータの持ち方の語（記録の列・履歴・レコード・テーブル・DB 等）が無い
+  - 実装の節（テーブル定義・API など）が混入しない
   - 要素一覧の全要素が、正本の索引にある語（無ければ正本の本文に現れる語）で名付けられている
   - モデル図が集約ごとに分かれ、各集約に責務・境界の箇条書きと classDiagram があり、全要素がどこかの集約の図に現れ、
     メソッドは公開コマンド（括弧つき）だけで、フィールドが無い。集約が2つ以上なら「集約どうしの関係」の図がある
@@ -219,14 +219,6 @@ def main() -> int:
         empty = [title for title in expected if not nonempty(content[title])]
         if empty:
             raise ValueError("空の節がある: " + ", ".join(empty))
-
-        # データの持ち方の語
-        forbidden_words = list(contract["forbidden_words"])
-        for title in ("要素一覧", "モデル図", "各要素の詳細", "集約の境界", "状態と型の分割", "ドメインイベント"):
-            body_text = "\n".join(line for line in content[title] if not line.strip().startswith("<!--"))
-            hits = [word for word in forbidden_words if word in body_text]
-            if hits:
-                raise ValueError(f"「{title}」にデータの持ち方の語がある: " + ", ".join(hits) + "。業務の事実は「起きた」「持つ」「いつ起きたか」で書く")
 
         # 要素一覧
         listing = [table for table in tables(content["要素一覧"]) if table["header"][:2] == ["要素", "種別"]]
