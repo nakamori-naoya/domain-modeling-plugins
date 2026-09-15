@@ -29,50 +29,29 @@ yq -o=json '.' "$PB/playbook.yml" > "$TMP/pb.json"
 expect_ok bash "$PB/scripts/validate-config.sh" "$TMP/pb.json"
 jq '.steps |= map(select(.id != "verify"))' "$TMP/pb.json" > "$TMP/pb-noverify.json"
 expect_fail bash "$PB/scripts/validate-config.sh" "$TMP/pb-noverify.json"
+expect_stderr "正本索引→grill→同一agent" bash "$PB/scripts/validate-config.sh" "$TMP/pb-noverify.json"
 jq '.contract.element_kinds += ["リポジトリ"]' "$TMP/pb.json" > "$TMP/pb-kind.json"
 expect_fail bash "$PB/scripts/validate-config.sh" "$TMP/pb-kind.json"
 
-# ── 根拠づけ（ground.py） ────────────────────────────────────────────────
-cat > "$TMP/dialogue.yml" <<'YAML'
-contract: grill/grill
-version: 1
-status: completed
-decisions:
-  - id: q1
-    question: 予約と予約待ちは別の集約にするか
-    answer: 別にする
-    rationale: 予約待ちは予約より長く生きるため
-open_questions:
-  - id: q2
-    question: 同時仮押さえの排他をどこで保証するか
-    state: open
-    reason: 設計資料で決める
-YAML
 cp "$FIX/domain-rule.md" "$TMP/order.md"
-expect_ok python3 "$PB/scripts/ground.py" --config "$TMP/resolved.yml" --dialogue-output "$TMP/dialogue.yml" --source "$TMP/order.md" --output "$TMP/grounded.json"
-jq -e '.source_path and (.decisions|length==1) and (.open_questions|length==1) and .existing_document_path==null' "$TMP/grounded.json" >/dev/null && ok "grounded input carries source, decisions, open questions" || ng "grounded input shape"
-expect_fail python3 "$PB/scripts/ground.py" --config "$TMP/resolved.yml" --dialogue-output "$TMP/dialogue.yml" --source "relative/order.md" --output "$TMP/g2.json"
-cp "$TMP/order.md" "$TMP/order.txt"
-expect_fail python3 "$PB/scripts/ground.py" --config "$TMP/resolved.yml" --dialogue-output "$TMP/dialogue.yml" --source "$TMP/order.txt" --output "$TMP/g3.json"
-sed 's/status: completed/status: failed/' "$TMP/dialogue.yml" > "$TMP/dialogue-failed.yml"
-expect_fail python3 "$PB/scripts/ground.py" --config "$TMP/resolved.yml" --dialogue-output "$TMP/dialogue-failed.yml" --source "$TMP/order.md" --output "$TMP/g4.json"
 
 # ── 正本の索引（source.py） ───────────────────────────────────────────────
-expect_ok python3 "$PB/scripts/source.py" --config "$TMP/resolved.yml" --grounded-input "$TMP/grounded.json" --output "$TMP/index.json"
+expect_ok python3 "$PB/scripts/source.py" --config "$PB/playbook.yml" --source "$TMP/order.md" --output "$TMP/index.json"
 jq -e '(.terms|index("利用枠")) and (.concepts|index("予約")) and (.events|length)>0 and (.invariants|length)>0 and (.bdd|index("BDD-001")) and (.vocabulary|index("仮押さえ予約")) and (.states.holders|index("予約"))' "$TMP/index.json" >/dev/null && ok "index picks terms, concepts, events, invariants, states, BDD ids" || ng "index content"
 # 負例: 契約の節（常に守られること）が無い正本
 grep -v '^# 常に守られること' "$TMP/order.md" | sed '/^| # | 常に守られること/,/^$/d' > "$TMP/order-noinv.md"
-jq --arg s "$TMP/order-noinv.md" '.source_path=$s' "$TMP/grounded.json" > "$TMP/grounded-noinv.json"
-expect_stderr "正本に契約の節が無いか空である" python3 "$PB/scripts/source.py" --config "$TMP/resolved.yml" --grounded-input "$TMP/grounded-noinv.json" --output "$TMP/index-noinv.json"
+expect_stderr "正本に契約の節が無いか空である" python3 "$PB/scripts/source.py" --config "$TMP/resolved.yml" --source "$TMP/order-noinv.md" --output "$TMP/index-noinv.json"
 
 # ── 割り当ての検査（verify.py） ───────────────────────────────────────────
-expect_ok python3 "$PB/scripts/verify.py" --config "$TMP/resolved.yml" --candidate "$FIX/domain-model.md" --source-index "$TMP/index.json"
-python3 "$PB/scripts/verify.py" --config "$TMP/resolved.yml" --candidate "$FIX/domain-model.md" --source-index "$TMP/index.json" 2>/dev/null \
-  | jq -e '.warnings | any(contains("仮押さえ期限"))' >/dev/null && ok "index-外の語は warning として報告される" || ng "expected warning for out-of-index term"
+expect_ok python3 "$PB/scripts/verify.py" --config "$PB/playbook.yml" --candidate "$FIX/domain-model.md" --source-index "$TMP/index.json"
+
+# 境界例: 正本本文には現れるが、明示索引に無い「会議室」を要素名にしても拒否する。
+sed 's/^| 利用枠 | 値オブジェクト | 利用枠 |/| 会議室 | 値オブジェクト | 会議室 |/; s/^### 利用枠$/### 会議室/' "$FIX/domain-model.md" > "$TMP/model-prose-only.md"
+expect_stderr "索引に無い" python3 "$PB/scripts/verify.py" --config "$TMP/resolved.yml" --candidate "$TMP/model-prose-only.md" --source-index "$TMP/index.json"
 
 # 負例1: 正本に無い語を要素にする
 sed 's/^| 利用枠 | 値オブジェクト | 利用枠 |/| 用紙ロット | 値オブジェクト | 用紙ロット |/; s/^### 利用枠$/### 用紙ロット/' "$FIX/domain-model.md" > "$TMP/model-unknown.md"
-expect_stderr "正本に無い" python3 "$PB/scripts/verify.py" --config "$TMP/resolved.yml" --candidate "$TMP/model-unknown.md" --source-index "$TMP/index.json"
+expect_stderr "索引に無い" python3 "$PB/scripts/verify.py" --config "$TMP/resolved.yml" --candidate "$TMP/model-unknown.md" --source-index "$TMP/index.json"
 # 負例2: 操作の契約に空欄がある
 sed 's/^- 拒む理由: なし（判定だけで、拒まない）$/- 拒む理由: /' "$FIX/domain-model.md" > "$TMP/model-blank.md"
 grep -q '^- 拒む理由: $' "$TMP/model-blank.md" || ng "fixture edit for blank field did not apply"
@@ -127,7 +106,7 @@ expect_stderr "BDD-013" python3 "$PB/scripts/verify.py" --config "$TMP/resolved.
 # 境界例: 対応しないBDDを宣言すれば通り、warning に出る
 sed 's/^- 対応しないBDD: なし$/- 対応しないBDD: BDD-013（利用枠の隣接を扱う要素が足りない）/' "$TMP/model-nobdd.md" > "$TMP/model-declared.md"
 python3 "$PB/scripts/verify.py" --config "$TMP/resolved.yml" --candidate "$TMP/model-declared.md" --source-index "$TMP/index.json" 2>"$TMP/err" \
-  | jq -e '.warnings | any(contains("対応しないBDDがある"))' >/dev/null && ok "declared unmapped BDD passes with warning" || ng "declared unmapped BDD: $(head -2 "$TMP/err")"
+  | jq -e '.warnings | any(contains("対応しないと明示されたBDDがある"))' >/dev/null && ok "declared unmapped BDD passes with neutral warning" || ng "declared unmapped BDD: $(head -2 "$TMP/err")"
 # 負例5: 実装の節が混入
 printf '\n## テーブル定義\n\n| 列 | 型 |\n|---|---|\n| id | uuid |\n' >> "$TMP/model-declared.md"
 expect_stderr "実装の節が混入" python3 "$PB/scripts/verify.py" --config "$TMP/resolved.yml" --candidate "$TMP/model-declared.md" --source-index "$TMP/index.json"
@@ -140,11 +119,6 @@ marker = "## 集約の境界"
 open(sys.argv[3], "w", encoding="utf-8").write(text.replace(marker, extra + "\n" + marker, 1))
 PY
 expect_stderr "詳細にあって要素一覧に無い要素" python3 "$PB/scripts/verify.py" --config "$TMP/resolved.yml" --candidate "$TMP/model-extra.md" --source-index "$TMP/index.json"
-
-# ── 素材の束ね（material.sh） ────────────────────────────────────────────
-expect_ok bash "$PB/scripts/material.sh" --config "$TMP/resolved.yml" --model "$FIX/domain-model.md" --grounded-input "$TMP/grounded.json" --source-index "$TMP/index.json" --output "$TMP/material.md"
-grep -q '^## 検査済みモデル' "$TMP/material.md" && grep -q '別にする' "$TMP/material.md" && grep -q '同時仮押さえの排他' "$TMP/material.md" && ok "material bundles model, decisions, open questions" || ng "material content"
-expect_fail bash "$PB/scripts/material.sh" --config "$TMP/resolved.yml" --model "$FIX/domain-model.md" --grounded-input "$TMP/grounded.json" --output "$TMP/m2.md"
 
 # ── 候補の保存（artifact.py） ────────────────────────────────────────────
 mkdir -p "$TMP/out/candidates"
@@ -163,10 +137,10 @@ git -C "$TMP" init -q
 mkdir -p "$TMP/domain-model"
 cp "$FIX/domain-model.md" "$TMP/domain-model/order-model.md"
 cp "$TMP/index.json" "$TMP/index-copy.json"
-expect_ok python3 "$PB/scripts/cleanup.py" --config "$TMP/resolved.yml" --artifact "source_index=$TMP/index-copy.json" --artifact "domain_model_document_path=$TMP/domain-model/order-model.md"
+expect_ok python3 "$PB/scripts/cleanup.py" --config "$PB/playbook.yml" --work-dir "$TMP" --artifact "source_index=$TMP/index-copy.json" --artifact "domain_model_document_path=$TMP/domain-model/order-model.md"
 [ ! -e "$TMP/index-copy.json" ] && [ -f "$TMP/domain-model/order-model.md" ] && ok "cleanup removes index and keeps document" || ng "cleanup outcome"
-expect_fail python3 "$PB/scripts/cleanup.py" --config "$TMP/resolved.yml" --artifact "source_index=$TMP/index.json"
-expect_fail python3 "$PB/scripts/cleanup.py" --config "$TMP/resolved.yml" --artifact "unknown=$TMP/index.json" --artifact "domain_model_document_path=$TMP/domain-model/order-model.md"
+expect_fail python3 "$PB/scripts/cleanup.py" --config "$PB/playbook.yml" --work-dir "$TMP" --artifact "source_index=$TMP/index.json"
+expect_fail python3 "$PB/scripts/cleanup.py" --config "$PB/playbook.yml" --work-dir "$TMP" --artifact "unknown=$TMP/index.json" --artifact "domain_model_document_path=$TMP/domain-model/order-model.md"
 
 echo "domain modeling scripts: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

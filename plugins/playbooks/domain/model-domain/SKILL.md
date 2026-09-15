@@ -5,41 +5,15 @@ description: 業務知識・コアドメイン（domain-rule）の正本を1本�
 
 # model-domain（正本の概念を、契約つきの要素へ写す）
 
-**正本に無い語を要素にしない。** 要素の名前は正本のユビキタス言語から取る。必要に思えた語は、要素にせず「捨てた割り当て」か「未決」へ理由付きで残す。
+**正本の明示索引に無い語を要素にしない。** 要素の名前は索引対象のユビキタス言語から取る。本文にだけ現れて必要に思えた語は、要素にせず「捨てた割り当て」か「未決」へ理由付きで残し、必要なら正本の反証へ戻す。
 
 **割り当ては写像であって、発見ではない。** 新しい業務の事実が要ると分かったら、それはこの段取りの外（domain-ruleの発見・反証）へ戻す。ここで業務知識を足さない。
 
-## 0. プラグイン root を決める
+## 1. 実行契約を受け取る
 
-<!-- BEGIN shared:skill-entry/root-block -->
-```bash
-BUNDLE_ROOT="${CLAUDE_PLUGIN_ROOT:-/absolute/path/to/this/plugin}"
-if [ -d "${BUNDLE_ROOT}/playbooks/domain/model-domain" ]; then
-  PLUGIN_ROOT="${BUNDLE_ROOT}/playbooks/domain/model-domain"
-else
-  PLUGIN_ROOT="${BUNDLE_ROOT}"
-fi
-```
+このSKILLを実行する同じagentが、同じdirectoryの`playbook.yml`と本文から参照する資料を全文読み、利用者の入力と明示された資料を保持した一つの文脈で最後まで判断する。YAMLの`steps`は工程順・`needs`・`provides`の正本であり、宣言順に辿る。`agent_work: invoking_agent`は別skillや架空runtimeを呼ぶ印ではなく、このagentが同じ文脈で意味判断する工程である。`script:`は決定論的な索引抽出・構造検査・安全な後片付け、`playbook:`は依存先の公開Skill呼び出しだけを表す。必要な入力や結果が無ければ推測せず停止する。
 
-`PLUGIN_ROOT`は配布物rootの絶対パスである。単一skill pluginではこの`SKILL.md`があるdirectory、複数skill pluginでは`skills/<skill>/`の2つ上に当たる。Claude Codeでは`${CLAUDE_PLUGIN_ROOT}`が自動展開される。
-<!-- END shared:skill-entry/root-block -->
-
-## 1. 工程を解決する
-
-<!-- BEGIN shared:skill-entry/config-load -->
-```bash
-CFG_FILE=$(bash "${PLUGIN_ROOT}/scripts/prepare.sh" "$(pwd)") || exit 2
-printf '%s\n' "$CFG_FILE"
-```
-
-**このコマンドは説明例ではない。必ず実行する。** 解決済みYAMLが空なら先へ進まない。設定ファイルを直接読んで代用しない。
-
-本文中の `${...}` は解決済みYAMLのプロパティである。使用時に `yq -er` で読み、欠落または `null` なら停止する。
-<!-- END shared:skill-entry/config-load -->
-
-`${.instructions.execution.directive}`と`${.instructions.interaction.directive}`に従い、`${.playbook.steps}`を上から実行する。自分のpackageのskillへは`--scope=${.resolution.scope_root}`と`${.playbook.contract}`と前工程の成果物を渡す。外部packageは`playbook:`の工程でだけ呼び、§3の手順に従う。
-
-一時ファイルは解決済みYAMLと同じdirectory（`$(dirname "$CFG_FILE")`）へ置く。
+`${.instructions.execution.directive}`と`${.instructions.interaction.directive}`に従い、`${.playbook.steps}`の認知責務を同じagentが上から実行し、決定論的toolの結果だけを工程間で受け渡す。外部packageは`playbook:`の工程でだけ呼び、§3の手順に従う。
 
 [実行指示書](references/execution-guidance.md)を必ず読む。`playbook.yml`は工程順・依存・入出力を決定し、実行指示書は各工程で意識することと、grillへ渡す題材固有の文脈を補う。
 
@@ -53,65 +27,47 @@ printf '%s\n' "$CFG_FILE"
 | pathが複数ある | 「どれを正本にしますか。モデルは正本1本につき1本です」 |
 | 指されたファイルが業務知識・コアドメインの型でない（`# 概要`〜`# BDD`の見出しを持たない） | 「この資料はdomain-rule型ではありません。先にdiscover-domainで正本を作りますか」 |
 
-既存のドメインモデル資料が同じ正本から作られていて、依頼が「更新」なら、その資料の絶対pathを`--existing`として`ground`工程へ渡す。依頼に無い既存資料を探して更新扱いにしない。
+既存のドメインモデル資料が同じ正本から作られていて、依頼が「更新」なら、その資料の絶対pathを同じ文脈に保持する。依頼に無い既存資料を探して更新扱いにしない。
 
-## 3. 外部playbookの呼び方
+## 3. 正本を先に索引にする
+
+`prepare-work-directory`工程では、同じagentがsystem temporary directory内にrun専用`work_directory`を一つ作る。`index-source`では、同じdirectoryの`scripts/source.py`へ公開`playbook.yml`、domain-rule正本の絶対path、run専用directory内の出力pathを直接渡し、索引の絶対pathを受け取る。
+
+索引は、正本の業務用語・業務イベント・概念・常に守られること・状態・誰が行えるか・業務ルール・拒む理由・BDD番号・未決を機械的に抜き出したものである。**索引の語だけが要素の名前になれる。** 正本が契約の節を持たなければここで止まる。正本を直してから再実行する。この索引を作ってから、正本と索引の両方から分かることを質問候補から除く。
+
+## 4. 外部playbookの呼び方
 
 `playbook:`の工程（`settle`と`document`）は、相手の公開契約だけを使って呼ぶ。相手のskill名、工程id、references、config、保存モード名、scriptの引数は使わない。呼び方は各公開契約の版に従う。
 
 ### settle（`grill`）
 
-`grill`の公開契約が定める入力YAMLを書く。`contract`・`version`・`output_to`は必ず入れ、`output_to`は自分が用意する絶対pathにする。その入力YAMLの絶対pathを`${.deps.grill.entry}`へ直接渡し、公開入口の手順に従う。設定解決や`prepare.sh`は使わない。完了したら`output_to`に書かれた出力YAMLだけを読む。相手のrootから内部pathを組み立てず、内部の記録やログも読まない。
+`grill`の公開契約が定める入力objectを公開Skill `grill:grill`へ直接渡し、公開入口の手順に従う。設定解決や`prepare.sh`は使わない。完了したら直接返された結果objectだけを読む。永続記録も必要な場合だけ利用者が明示した`output_to`を追加する。相手のrootから内部pathを組み立てず、内部の記録やログも読まない。
 
-入力に`topic`（正本の題材名）、`context`（`purpose`・`audience`・`boundary`）、`questions`（`{id, question, recommendation}`。推奨は必ず添える）、`grounding`（正本の絶対path）、`output_to`を渡す。**正本と索引から読み取れることは問わない。** 問うのは、正本だけでは一つに決まらない割り当てだけである。何を問うかは[実行指示書](references/execution-guidance.md)の「settleで確かめること」に従い、題材固有の観点は`context`で渡して相手に持ち込ませない。
+入力に`topic`（正本の題材名）、`context`（`purpose`・`audience`・`boundary`）、`questions`（`{id, question, recommendation}`。推奨は必ず添える）、`grounding`（正本の絶対path）を渡す。**正本と索引から読み取れることは問わない。** 問うのは、正本だけでは一つに決まらない割り当てだけである。何を問うかは[実行指示書](references/execution-guidance.md)の「settleで確かめること」に従い、題材固有の観点は`context`で渡して相手に持ち込ませない。
 
-出力は`decisions`と`open_questions`の2つだけである。「根拠づけられた入力」は相手の出力ではないので、次の`ground`工程がこちらの側で束ねる。
+出力は`decisions`と`open_questions`である。対話結果、domain-rule正本、依頼、指定された既存資料は同じagentの文脈に保持し、値運搬だけの`ground`ファイルは作らない。
 
-```bash
-python3 "${PLUGIN_ROOT}/scripts/ground.py" --config "$CFG_FILE" \
-  --dialogue-output "<output_toのpath>" \
-  --source "<domain-rule正本の絶対path>" \
-  --request "<依頼のpath>" [--existing "<既存資料の絶対path>"] \
-  --output "<束ねた入力の書き込み先>"
-```
-
-契約を満たさない出力（契約IDや版の不一致、`status`が`completed`でない、`rationale`の無い決定、`open`/`withdrawn`以外の状態）では束ねずに停止する。
+契約を満たさない出力（契約IDや版の不一致、`status`が`completed`でない、`rationale`の無い決定、`open`/`withdrawn`以外の状態）では停止する。全体への明示合意を得る前は後続工程へ進まない。`decisions`と`open_questions`はキーが存在する配列でなければならず、欠落、`null`、別の型を空配列へ補正しない。契約どおりの空配列は合法として受け入れる。
 
 ### document（`write-doc`）
 
-公開契約v2の入力を`${.deps.write-doc.entry}`へ直接渡す。`material`は`assemble`が束ねた素材を`{kind: file, path: <絶対path>}`としたobject配列にする。`document_type`に`${.playbook.document_type}`を渡し、`references`には[成果物の形](references/deliverable.md)の絶対pathを渡す。
+公開契約v2の入力を公開Skill `write-doc:write-doc`へ直接渡す。`material`は同じagentが作って検査した本文を`{kind: text, content: <完成本文>}`としたobject配列にする。`document_type`に`${.playbook.document_type}`を渡し、`references`には[成果物の形](references/deliverable.md)の絶対pathを渡す。
 
-保存先は、新規作成なら`output_directory`と`name`（正本のファイル名から`-model`を付けた名前。例: `order.md` → `order-model.md`）、既存資料の更新なら`update_target`（`ground`へ渡した`existing_document_path`）を渡す。両方式は排他である。新規作成先が依頼に無ければ、保存先を推測せず利用者へ確認して停止する。
+保存先は、新規作成なら公開入力の`output_directory`と`name`、既存資料の更新なら利用者が明示した`existing_document_path`を`update_target`へ渡す。両方式は排他であり、新規の2値と更新先を同時に渡さない。新規作成先が依頼に無ければ、保存先やファイル名を推測せず利用者へ確認して停止する。
 
 結果は`status`（`completed` | `failed`）と、成功時の`path`または失敗時の`reason`として直接受け取る。中間YAMLと出力YAMLは作らない。1回の呼び出しで作る資料は1本だけである。`status: completed`と絶対pathを確かめてから次へ進む。
 
-## 4. 正本を索引にし、割り当てて、検査する
+## 5. 割り当てて検査する
 
-```bash
-python3 "${PLUGIN_ROOT}/scripts/source.py" --config "$CFG_FILE" \
-  --grounded-input "<ground.pyの出力>" --output "<索引の書き込み先>"
-```
+`assign`工程へ入る前に[ドメイン要素へ割り当てる判断規律](references/modeling-judgment.md)を全文読む。同じagentが正本、索引、決定、未決、`${.playbook.contract}`とこの判断規律を同じ文脈で適用し、正本からの写像、8つの割り当て規律、各要素へ答える問いを満たす完成本文を作る。同じ本文をrun専用directoryの検査用一時ファイルへ書き、続く`verify`工程へ公開`playbook.yml`、候補、索引の絶対pathを直接渡す。
 
-索引は、正本の業務用語・業務イベント・概念・常に守られること・状態・誰が行えるか・業務ルール・拒む理由・BDD番号・未決を機械的に抜き出したものである。**索引の語だけが要素の名前になれる。** 正本が契約の節を持たなければここで止まる。正本を直してから再実行する。
+検査は述語だけを見る（節と順序、実装の節の混入、明示索引に無い語、要素ごとの必須項目と操作の契約、BDDと要素の対応記載、未決の有無）。**通らなければ`assign`へ戻って候補を直す。検査を緩めない。** 通ったら`warnings`を報告に写す。`warnings`は対応の必要性や過不足を断定せず、同じagentが正本と候補を読み返す箇所の索引である。
 
-`assign`工程は自分のpackageの`assign-domain-model`skillに、`--scope=${.resolution.scope_root}`、束ねた入力、索引、`${.playbook.contract}`を渡して実行する。候補モデルの絶対pathが返る。
+検査に通った本文は同じagentが保持し、値運搬だけの`material`ファイルを作らず`write-doc`へ`kind: text`で渡す。
 
-```bash
-python3 "${PLUGIN_ROOT}/scripts/verify.py" --config "$CFG_FILE" \
-  --candidate "<候補モデルの絶対path>" --source-index "<索引の絶対path>"
-```
+## 6. 後片付けして報告する
 
-検査は述語だけを見る（節と順序、実装の節の混入、正本に無い語、要素ごとの必須項目と操作の契約、BDDの対応の過不足、未決の有無）。**通らなければ`assign`へ戻って候補を直す。検査を緩めない。** 通ったら`warnings`を報告に写す。`warnings`は合否ではなく、人が読み返す箇所の索引である。
-
-```bash
-bash "${PLUGIN_ROOT}/scripts/material.sh" --config "$CFG_FILE" \
-  --model "<検査済みモデル>" --grounded-input "<ground.pyの出力>" \
-  --source-index "<索引>" --output "<素材の書き込み先>"
-```
-
-## 5. 後片付けして報告する
-
-最終資料の保存を確認したら、`scripts/cleanup.py`へ`--config "$CFG_FILE"`と`--artifact <論理名>=<絶対path>`を渡し、`${.playbook.contract.cleanup}`で削除候補にした自分の作業用成果物だけを後片付けする。保持対象・repositoryの外・追跡済みファイルは削除しない。後片付けを外部packageへ委ねない。
+最終資料の保存成功を確認した同じagentだけが、公開`playbook.yml`、`work_directory`、論理名つき絶対pathを`cleanup.py`へ直接渡す。`${.playbook.contract.cleanup}`で削除候補にしたrun専用directory内の今回の作業用成果物だけを後片付けする。保持対象、run専用directoryの外、symlink、追跡済みファイルは削除しない。
 
 報告する内容:
 
@@ -120,13 +76,7 @@ bash "${PLUGIN_ROOT}/scripts/material.sh" --config "$CFG_FILE" \
 - **状態と型の分割** — どの状態で何ができ、何ができないか
 - 捨てた割り当てと、その理由
 - 未決と、何が分かれば確定するか
-- 検査の`warnings`（索引外だが本文に現れる語、例外扱いの種別、対応しないBDD、対応のない要素）
+- 検査の`warnings`（例外扱いの種別、対応しないBDD、対応のない要素）。索引外の語はwarningではなく失敗である
 - **機械検査が通ったときに言えるのは、判定した述語が成り立ったことだけである。** 「モデルは正しい」と書かない
 
 資料が保存されるまで完了にしない。データモデル・実装コード・層構成は作らない。
-
-## 実行設定の寿命
-
-prepareが返した絶対pathを実行記録へ保持する。別shellではそのpathを`CFG_FILE`へ明示して読み、shell変数の継承を前提にしない。完了時と失敗停止時のどちらも、最後の設定利用後に`python3 "${PLUGIN_ROOT}/scripts/run-config.py" cleanup --config "$CFG_FILE"`を実行する。他runの設定やdirectoryを削除しない。**外部packageの実行設定には触れない。**
-
-条件付き工程を含め、各工程を呼ぶ直前に`yq -o=json '.' "$CFG_FILE" | python3 "${PLUGIN_ROOT}/scripts/resolve-dependency.py" --check-steps <工程id>`を実行する。失敗時は工程を実行せず停止する。

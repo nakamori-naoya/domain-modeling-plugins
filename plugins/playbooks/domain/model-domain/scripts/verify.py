@@ -5,7 +5,7 @@
 
   - 節と順序が契約と一致し、どの節も空でない
   - 実装の節（テーブル定義・API など）が混入しない
-  - 要素一覧の全要素が、正本の索引にある語（無ければ正本の本文に現れる語）で名付けられている
+  - 要素一覧の全要素が、正本から機械抽出した明示索引の語だけで名付けられている
   - モデル図が集約ごとに分かれ、各集約に責務・境界の箇条書きと classDiagram があり、全要素がどこかの集約の図に現れ、
     メソッドは公開コマンド（括弧つき）だけで、フィールドが無い。集約が2つ以上なら「集約どうしの関係」の図がある
   - 要素一覧の全要素（ドメインイベントを除く）に詳細があり、必須項目（####）と操作ごとの契約（#### 操作:）が埋まっている
@@ -40,7 +40,8 @@ def fail(message: str) -> int:
 def load_playbook(config_path: Path) -> dict:
     result = subprocess.run(["yq", "-o=json", "-I=0", ".", str(config_path)],
                             check=True, capture_output=True, text=True)
-    return json.loads(result.stdout)["playbook"]
+    resolved = json.loads(result.stdout)
+    return resolved.get("playbook", resolved)
 
 
 def read_regular(raw: str, label: str) -> tuple[Path, str]:
@@ -206,7 +207,6 @@ def main() -> int:
         path, body = read_regular(args.candidate, "候補モデル")
         index_path, index_text = read_regular(args.source_index, "索引")
         index = json.loads(index_text)
-        source_body = Path(index["source_path"]).read_text(encoding="utf-8")
         vocabulary = set(index["vocabulary"])
 
         order, content, headings = split_sections(body)
@@ -235,13 +235,19 @@ def main() -> int:
                 raise ValueError(f"要素「{name}」の種別が契約の外: {kind}")
             if any(kind.startswith(ex) for ex in exceptional):
                 warnings.append(f"例外扱いの種別を使っている: {name}（{kind}）。捨てた割り当てに理由があるか読む")
+            # Deterministic validation declaration:
+            # source=source.py JSON index; input=element name and source-term cells;
+            # normalization=split comma/slash-separated source terms and strip markup;
+            # predicate=every resulting word is an exact member of index.vocabulary;
+            # diagnostic=the element and first absent word; positive=利用枠;
+            # negative=用紙ロット; boundary=会議室 appears in prose but not the
+            # explicit index and therefore fails. Semantic suitability is not scored.
             for word in {name} | set(names_in(term)):
-                if word in vocabulary:
-                    continue
-                if word in source_body:
-                    warnings.append(f"「{word}」は索引（業務用語・業務イベント・概念・状態）に無いが正本の本文には現れる。要素「{name}」")
-                else:
-                    raise ValueError(f"要素「{name}」の語「{word}」が正本に無い。正本に無い語を要素にしない")
+                if word not in vocabulary:
+                    raise ValueError(
+                        f"要素「{name}」の語「{word}」が索引に無い。"
+                        "要素名と正本の語は明示索引から選ぶ"
+                    )
             elements[name] = {"kind": kind, "term": term}
 
         # 各要素の詳細
@@ -336,6 +342,14 @@ def main() -> int:
         elif relation is not None:
             raise ValueError("集約が1つなのに「### 集約どうしの関係」がある")
 
+        # Deterministic validation declaration:
+        # source=source index BDD ids and candidate element list;
+        # input=the mapping table plus explicit non-mapping declarations;
+        # normalization=BDD regex extraction and comma/slash-separated names;
+        # predicate=every source BDD and every detailed element is either mapped
+        # or explicitly declared unmapped; diagnostic=missing/unknown identifiers;
+        # positive=all mapped; negative=undeclared BDD; boundary=explicitly
+        # unmapped passes with a neutral warning. Necessity/adequacy is semantic.
         # BDDとの対応
         mapping_lines = content["BDDとの対応"]
         mapping_tables = [table for table in tables(mapping_lines) if table["header"][:1] == ["BDD"]]
@@ -361,12 +375,13 @@ def main() -> int:
         declared_unused = names_in(unused_line.split(":", 1)[1])
         unused = [name for name in needs_detail if name not in covered_elements and name not in declared_unused]
         if unused:
-            raise ValueError("対応表にも「対応のない要素・操作」にも無い要素: " + ", ".join(unused)
-                             + "。BDDに対応しない要素は余りである")
+            raise ValueError("対応表にも「対応のない要素・操作」にも記載が無い要素: " + ", ".join(unused))
         if declared_unmapped:
-            warnings.append("対応しないBDDがある: " + ", ".join(sorted(declared_unmapped)) + "。要素が足りていない")
+            warnings.append("対応しないと明示されたBDDがある: " + ", ".join(sorted(declared_unmapped))
+                            + "。必要性と対応方針は同じagentが正本と候補を読んで判断する")
         if declared_unused and declared_unused != ["なし"]:
-            warnings.append("対応のない要素・操作がある: " + ", ".join(declared_unused) + "。要素が余っている")
+            warnings.append("対応がないと明示された要素・操作がある: " + ", ".join(declared_unused)
+                            + "。必要性と対応方針は同じagentが正本と候補を読んで判断する")
 
         # 未決
         if not nonempty(content["未決"]):

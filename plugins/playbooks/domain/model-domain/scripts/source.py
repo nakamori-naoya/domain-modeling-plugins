@@ -5,7 +5,7 @@
 「その見出しの下にある表の第1列・小見出し・箇条書き・BDD番号」を拾うだけである。
 意味の判断はしない。索引に無い語を要素にできない、という検査の材料を作る。
 
-  source.py --config <解決済みYAML> --grounded-input <ground.pyの出力> --output <索引の書き込み先>
+  source.py --config <公開playbook.yml> --source <domain-rule正本> --output <索引の書き込み先>
 
 exit 0 = 索引を書いた / 2 = 正本が契約の節を持たない、または読めない。
 """
@@ -155,14 +155,14 @@ def collect(nodes: list[dict], sections: dict[str, str]) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
-    parser.add_argument("--grounded-input", required=True)
+    parser.add_argument("--source", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
     try:
         resolved = load_yaml(Path(args.config))
-        sections = resolved["playbook"]["contract"]["source_sections"]
-        grounded = json.loads(regular_file(args.grounded_input, "根拠づけられた入力").read_text(encoding="utf-8"))
-        source = regular_file(grounded["source_path"], "正本")
+        playbook = resolved.get("playbook", resolved)
+        sections = playbook["contract"]["source_sections"]
+        source = regular_file(args.source, "正本")
         nodes = outline(source.read_text(encoding="utf-8"))
         index = collect(nodes, sections)
         missing = [sections[role] for role in REQUIRED_ROLES if not index.get(role)]
