@@ -82,12 +82,26 @@ def skill_name(path: Path) -> str | None:
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     if not lines or lines[0] != "---":
         return None
-    for line in lines[1:]:
-        if line == "---":
-            break
-        if line.startswith("name: "):
-            return line[6:].strip().strip("\"'")
-    return None
+    try:
+        closing = lines.index("---", 1)
+    except ValueError:
+        return None
+    result = subprocess.run(
+        ["yq", "-o=json", "-I=0", "."],
+        input="\n".join(lines[1:closing]) + "\n",
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode:
+        return None
+    try:
+        frontmatter = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(frontmatter, dict):
+        return None
+    name = frontmatter.get("name")
+    return name if isinstance(name, str) and name else None
 
 
 def provider_step_ids(package_root: Path, runtime: str) -> set[str]:
