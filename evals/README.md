@@ -1,6 +1,6 @@
 # domain-modeling の eval
 
-`model-domain` は正本だけでは決まらない割り当てを `grill` で1問ずつ確かめてからモデル資料を書く。`claude -p`（対話なし・tool無し）の1往復では対話と保存を観測できないので、自動実行は行わず手動evalを記録する。`scenarios.json` は agent が読む会話fixture（`scripts/evaluate-skills.py` の入力形式）であり、対話を要する入口なので 2026-09-16 の実行対象から外した。
+`model-domain` は正本だけでは決まらない割り当てを `grill` で1問ずつ確かめてからモデル資料を書く。`claude -p`（対話なし・tool無し）の1往復では対話と保存を観測できないので、自動実行は行わず手動evalを記録する。`scenarios.json` は agent が読む会話fixture（`../harness-tools/tools/evaluate-skills.py` の入力形式）であり、対話を要する入口なので 2026-09-16 の実行対象から外した。
 
 ## 手動evalの手順（代表1本: 正本に無い概念の扱い）
 

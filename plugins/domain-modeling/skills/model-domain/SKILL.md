@@ -26,7 +26,7 @@ description: 業務知識・コアドメイン（domain-rule）の正本を1本�
 
 ## 判断基準
 
-`assign`の前に[ドメイン要素へ割り当てる判断規律](references/modeling-judgment.md)、[対応規則](references/mapping.md)、[割り当ての規律](references/disciplines.md)、[要素ごとの問い](references/element-questions.md)、[成果物の形](references/deliverable.md)を全文読む。読まずに割り当てると、正本に無い語を要素にするか、形が同じ語を1つにまとめる。
+`assign`の前に[ドメイン要素へ割り当てる判断規律](references/modeling-judgment.md)、[対応規則](references/mapping.md)、[割り当ての規律](references/disciplines.md)、[要素ごとの問い](references/element-questions.md)を全文読む。読まずに割り当てると、正本に無い語を要素にするか、形が同じ語を1つにまとめる。成果物の型（節の名前と順序、小見出しと項目の記法、表の列）はwrite-docの`domain-model`型のtemplateが定め、この入口は本文を`kind: text`で作って`document_type: domain-model`で保存するだけである。
 
 | 観察対象 | 述語 | 行動 |
 |---|---|---|
@@ -60,7 +60,7 @@ description: 業務知識・コアドメイン（domain-rule）の正本を1本�
    MD
    ```
 
-5. **document（`write-doc`）。** 検査済み本文を`{kind: text, content: <完成本文>}`の1要素配列で`material`に、`domain-model`を`document_type`に、[成果物の形](references/deliverable.md)の絶対pathと入力の`references`を連結して`references`に渡す。新規なら`output_directory`と`name`、更新なら`existing_document_path`を`update_target`として排他的に渡す。返った結果の`status`が`completed`で、`path`が指定した保存先（更新なら`update_target`）と一致することを確かめ、その`path`を`domain_model_document_path`にする。`failed`、結果欠落、path不一致なら理由を報告して止まる。
+5. **document（`write-doc`）。** 検査済み本文を`{kind: text, content: <完成本文>}`の1要素配列で`material`に、`domain-model`を`document_type`に、入力の`references`をそのまま`references`に渡す。新規なら`output_directory`と`name`、更新なら`existing_document_path`を`update_target`として排他的に渡す。返った結果の`status`が`completed`で、`path`が指定した保存先（更新なら`update_target`）と一致することを確かめ、その`path`を`domain_model_document_path`にする。`failed`、結果欠落、path不一致なら理由を報告して止まる。
 
 ## 停止条件
 

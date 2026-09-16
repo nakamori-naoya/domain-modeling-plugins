@@ -56,4 +56,4 @@
 
 ### document
 
-検査済み本文を`{kind: text, content: <完成本文>}`として直接渡す。`write-doc`には`document_type: domain-model`と、[成果物の形](deliverable.md)と入力の`references`を連結して`references`として渡す。新規なら`output_directory`と`name`、更新なら`existing_document_path`を`update_target`として排他的に渡す。型の実現方法、テンプレート、記載例はwrite-doc側に委ねる。値運搬だけの素材fileは作らない。保存後に消すべき一時fileは無い。
+検査済み本文を`{kind: text, content: <完成本文>}`として直接渡す。`write-doc`には`document_type: domain-model`と、入力の`references`をそのまま`references`として渡す。新規なら`output_directory`と`name`、更新なら`existing_document_path`を`update_target`として排他的に渡す。型の実現方法、テンプレート、記載例はwrite-doc側に委ねる。値運搬だけの素材fileは作らない。保存後に消すべき一時fileは無い。
