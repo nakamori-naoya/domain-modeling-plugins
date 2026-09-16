@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "plugin": "domain-modeling",
+  "version": "3.1.0",
+  "created_at": "2026-09-16T12:25:24.034729+00:00",
+  "notes": "資料templateをwrite-docへ一元化: model-domainのreferences/deliverable.md（ドメインモデル資料の型を定めるfile。write-docのdomain-model templateと同型）を撤去し、本文をkind:textで作りdocument_type: domain-modelで保存するだけにした。write-docへ渡すreferencesは入力のreferencesだけ。保守toolの正本を兄弟checkout harness-toolsへ集約し、scripts/の複製とshared/の同期機構を廃止（repository tooling。配布物には影響しない）。",
+  "breaking": "なし。公開入口model-domainの入力・出力・工程順・verify.pyの述語は不変。",
+  "migration": "marketplace を update し plugin を再 install する。write-doc の domain-model template が資料の型の唯一の正本になるので、型の記法はそちらを読む。",
+  "checks": {
+    "codex": {
+      "status": "manifest-and-contract-tests-passed",
+      "native-client-installation": "not-executed（merge 後に harness-tools/tools/install-plugins.sh で導入）",
+      "evidence": "bash scripts/validate.sh: exit 0 (Validation: passed; domain modeling scripts: 35 passed, 0 failed)"
+    },
+    "claude": {
+      "status": "manifest-and-contract-tests-passed",
+      "native-client-installation": "not-executed（merge 後に harness-tools/tools/install-plugins.sh で導入）",
+      "evidence": "bash scripts/validate.sh: exit 0 (Validation: passed; domain modeling scripts: 35 passed, 0 failed)"
+    },
+    "root-validation": "root scripts/validate.sh（harness-tools/tools/validate-workspace.sh へ委譲）: Root validation: passed。harness-tools/ci/validate.sh <repo>: CI validation: passed"
+  },
+  "files": [
+    ".agents/plugins/marketplace.json",
+    "plugins/domain-modeling/.codex-plugin/plugin.json",
+    ".claude-plugin/marketplace.json",
+    "plugins/domain-modeling/.claude-plugin/plugin.json"
+  ]
+}
