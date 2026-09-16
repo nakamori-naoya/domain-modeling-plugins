@@ -35,13 +35,12 @@ docs/domain/order-cancellation.md を正本に、ドメインモデル資料を�
 
 ## 工程
 
-1. **作業領域と正本の索引** — run専用directoryを作り、業務用語・業務イベント・概念・常に守られること・状態・業務ルール・拒む理由・BDD番号・未決を機械的に抜き出す
-2. **grill** — 正本と索引だけでは決まらない割り当て（集約の境界、状態ごとの型の分割、索引に無い語の扱い）を1問ずつ確かめ、全体への明示合意を待つ
+1. **正本の索引** — 業務用語・業務イベント・概念・常に守られること・状態・業務ルール・拒む理由・BDD番号・未決を機械的に抜き出し、標準出力へ返す（fileには書かない）
+2. **grill** — 正本と索引だけでは決まらない割り当て（集約の境界、状態ごとの型の分割、索引に無い語の扱い）のうち成果を左右する最大6問を1問ずつ確かめ、全体への明示合意を待つ。問わなかった論点は推奨を仮置きして未決に載せる
 3. **同一agentの判断** — 依頼・正本・索引・決定・未決を一つの文脈で読む
 4. **割り当て** — 索引の語だけを要素にし、要素ごとに目的・何でないか・持つもの・不変条件・生成の条件・協働相手と、操作の契約を書く
-5. **検査** — 節と順序、明示索引に無い語、要素ごとの必須項目、操作の契約、BDDと要素の対応記載を見る。通ったときに言えるのは構造述語が成り立ったことだけで、必要性や過不足は同じagentが意味判断する
+5. **検査** — 候補本文を標準入力で渡し、正本pathから導いた索引に対して節と順序、明示索引に無い語、要素ごとの必須項目、操作の契約、BDDと要素の対応記載を見る。通ったときに言えるのは構造述語が成り立ったことだけで、必要性や過不足は同じagentが意味判断する
 6. **write-doc** — `domain-model`型の資料を1本保存する
-7. **後片付け** — 自分の中間成果物だけを削除する
 
 割り当ての規律（正本に無い語を要素にしない／形が同じでも概念・コンテキストが違えば分ける／集合への規則を1件に持たせない／確認と変更を分けない／既定は不変で状態を持つのは集約だけ／BDDに対応しない要素は残さない／集約どうしの協働は手段を明記する／データの持ち方の語で業務の事実を書かない）は、[割り当ての規律](plugins/domain-modeling/skills/model-domain/references/disciplines.md)に該当条件・行動・非該当条件つきで置く。正本の節からモデル要素への対応は[対応規則](plugins/domain-modeling/skills/model-domain/references/mapping.md)にある。
 
@@ -101,7 +100,7 @@ claude plugin update domain-modeling@domain-modeling --scope "$CLAUDE_PLUGIN_SCO
 
 ## 公開インストール単位と内包する機能
 
-利用者がインストールするのは`domain-modeling@domain-modeling`だけである。packageは`plugins/domain-modeling/`にあり、公開入口`skills/model-domain/`が`SKILL.md`（目的・入力・判断基準・手順・停止条件・出力）、`playbook.yml`（工程順・入出力・scriptが読む契約）、`references/`（割り当ての規律、対応規則、要素ごとの問い、成果物の形、実行指示書）、`scripts/`（`source.py`索引、`verify.py`検査、`cleanup.py`後片付け）を持つ。設定fileは持たず、保存先は公開入力で受け取る。中間生成物はsystem temporary directory内のrun専用directoryに置き、保存成功後に`scripts/cleanup.py`が宣言された論理名の成果物だけを削除する。
+利用者がインストールするのは`domain-modeling@domain-modeling`だけである。packageは`plugins/domain-modeling/`にあり、公開入口`skills/model-domain/`が`SKILL.md`（目的・入力・判断基準・手順・停止条件・出力）、`playbook.yml`（工程順・入出力・scriptが読む契約）、`references/`（割り当ての規律、対応規則、要素ごとの問い、成果物の形、実行指示書）、`scripts/`（`source.py`索引、`verify.py`検査）を持つ。設定fileは持たず、保存先は公開入力で受け取る。候補本文はagentがインメモリで保持して検査scriptへ標準入力で渡し、作業directory・一時file・後片付け工程を持たない。
 
 ## 検証
 
@@ -109,6 +108,6 @@ claude plugin update domain-modeling@domain-modeling --scope "$CLAUDE_PLUGIN_SCO
 bash scripts/validate.sh
 ```
 
-配布manifest、隣接`playbook.yml`の宣言と`script:`参照の実在、禁止参照形の不在、構文、消費側契約lint（実配布物の兄弟checkout `../grill-plugins/plugins/grill` と `../write-doc-plugins/plugins/write-doc` が要る）、所有script（`source.py` / `verify.py` / `cleanup.py`）の典型例・負例・境界例を実行する。保守toolは`product-planning-plugins/shared/runtime-source`を正本とし、`scripts/sync-runtime.py --check`で複製の一致を検査する。workspace rootの`bash scripts/validate.sh <このrepositoryの絶対path>`が配置・manifest・隣接playbook.yml・禁止参照形の構造契約を検査する。
+配布manifest、隣接`playbook.yml`の宣言と`script:`参照の実在、禁止参照形の不在、構文、消費側契約lint（実配布物の兄弟checkout `../grill-plugins/plugins/grill` と `../write-doc-plugins/plugins/write-doc` が要る）、所有script（`source.py` / `verify.py`）の典型例・負例・境界例を実行する。保守toolは`product-planning-plugins/shared/runtime-source`を正本とし、`scripts/sync-runtime.py --check`で複製の一致を検査する。workspace rootの`bash scripts/validate.sh <このrepositoryの絶対path>`が配置・manifest・隣接playbook.yml・禁止参照形の構造契約を検査する。
 
 [意味評価fixture](evals/scenarios.json)は`scripts/evaluate-skills.py`で生成modelと独立judgeへ渡し、入力、応答、criterionごとの逐語quoteとreasonを記録する。runnerのexit 0は全caseの記録完了だけを示し、品質承認を示さない。criterionの真偽は人またはagentが記録を再読して採否を判断するための意味証拠である。adapter非zero、不正な応答、根拠不整合など記録を完了できない操作失敗は非zeroで終了する。

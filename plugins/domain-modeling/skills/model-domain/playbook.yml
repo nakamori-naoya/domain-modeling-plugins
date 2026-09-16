@@ -1,5 +1,6 @@
 # model-domain — domain-rule正本の業務概念を戦術DDDの要素へ割り当て、契約つきのドメインモデル資料を1本保存する。
 # 工程順と入出力、scriptが読む契約（contract）だけを持つ。判断規律はSKILL.mdとreferencesが持つ。
+# 候補本文はagentがインメモリで保持し、検査scriptへは標準入力で渡す。索引はscriptが正本pathから毎回導く。作業directoryや一時fileは作らない。
 version: 2
 name: model-domain
 description: domain-rule正本を1本受け取り、業務概念を値オブジェクト・エンティティ・集約・ドメインイベントへ割り当て、各要素の目的・境界・不変条件・操作の契約を言語非依存で書いたドメインモデル資料を1本保存する
@@ -9,7 +10,7 @@ requires:
   - {plugin: grill, marketplace: grill}
   - {plugin: write-doc, marketplace: write-doc}
 
-# scriptが読む契約。source.pyはsource_sections、verify.pyはmodel_sections以下、cleanup.pyはcleanupを読む。
+# scriptが読む契約。source.pyはsource_sections、verify.pyはsource_sectionsとmodel_sections以下を読む。
 contract:
   # 正本（domain-rule）から索引に拾う節。左が索引の役、右が正本の見出し。
   source_sections:
@@ -31,39 +32,31 @@ contract:
   operation_fields: [事前条件, 事後条件, 拒む理由, 発するイベント]
   collaboration_means: [識別子で参照, 値として渡す, ドメインイベント, 呼び手が両方を操作]
   forbidden_sections: [テーブル定義, 論理データモデル図, API, 画面, リポジトリ, 層構成]
-  cleanup:
-    delete_after_document: [source_index, candidate_model_path]
-    preserve: [domain_model_document_path]
 
 # stepsは上から実行する。needsは開始条件、providesは次工程へ渡す成果物。
 steps:
-  - id: prepare-work-directory
-    agent_work: invoking_agent
-    purpose: 同じagentがsystem temporary directory内にこのrun専用directoryを一つ作り、索引と検査候補だけの安全な作業領域にする
-    provides: [work_directory]
-
   - id: index-source
     script: scripts/source.py
-    purpose: 正本から業務用語・業務イベント・概念・常に守られること・状態・業務ルール・拒む理由・BDD番号・未決を機械的に抜き出し、割り当ての候補と検査の正解にする
-    needs: [domain_rule_path, work_directory]
+    purpose: 正本から業務用語・業務イベント・概念・常に守られること・状態・業務ルール・拒む理由・BDD番号・未決を機械的に抜き出し、標準出力のJSONとして割り当ての候補にする
+    needs: [domain_rule_path]
     provides: [source_index]
 
   - id: settle
     playbook: grill
-    purpose: 正本と索引だけでは決まらない割り当て（集約の境界、状態ごとの型の分割、索引に無い語の扱い、未決の要素）を利用者へ1問ずつ確かめ、明示合意した決定と未決を残す
+    purpose: 正本と索引だけでは決まらない割り当て（集約の境界、状態ごとの型の分割、索引に無い語の扱い、未決の要素）のうち成果を左右する最大6問を利用者へ1問ずつ確かめ、明示合意した決定と未決を残す
     needs: [domain_rule_path, user_input, source_index]
     provides: [decisions, open_questions]
 
   - id: assign
     agent_work: invoking_agent
-    purpose: 同じagentが正本、索引、決定、未決を一つの文脈で読み、索引の語だけを要素にした契約どおりの本文を作り、検査用の一時ファイルへ同じ本文を書く
+    purpose: 同じagentが正本、索引、決定、未決（問わなかった論点は推奨を仮置き）を一つの文脈で読み、索引の語だけを要素にした契約どおりの本文をインメモリで作る
     needs: [domain_rule_path, source_index, decisions, open_questions]
-    provides: [final_markdown, candidate_model_path]
+    provides: [final_markdown]
 
   - id: verify
     script: scripts/verify.py
-    purpose: 節と順序、明示索引に無い要素名、要素ごとの必須項目、操作の契約、モデル図のクラスと要素の一致、BDDと要素の対応記載を構造検査し、通った候補だけを返す
-    needs: [candidate_model_path, source_index]
+    purpose: 候補本文を標準入力で受け、正本pathから同じ索引を導いて、節と順序、明示索引に無い要素名、要素ごとの必須項目、操作の契約、モデル図のクラスと要素の一致、BDDと要素の対応記載を構造検査する
+    needs: [domain_rule_path, final_markdown]
     provides: [validation_report]
 
   - id: document
@@ -78,9 +71,3 @@ steps:
       - when: not existing_document_path
         needs: [output_directory, name]
     provides: [domain_model_document_path]
-
-  - id: cleanup
-    script: scripts/cleanup.py
-    purpose: 最終資料の保存を確認した後、contract.cleanupで削除候補にした自分の作業用成果物だけを削除し、最終資料を保持する
-    needs: [work_directory, source_index, candidate_model_path, domain_model_document_path]
-    provides: [cleanup_report]

@@ -14,9 +14,12 @@
   - 正本の全BDDが対応表か「対応しないBDD」に現れ、全要素が対応表か「対応のない要素・操作」に現れる
   - 未決の節が空でない（「なし」を含む）
 
-  verify.py --playbook <同じdirectoryのplaybook.yml> --candidate <候補モデルの絶対path> --source-index <索引の絶対path>
+  verify.py --playbook <同じdirectoryのplaybook.yml> --source <domain-rule正本の絶対path>  < <候補モデル本文（Markdown）>
 
-exit 0 = 通った（stdoutに verified_model_path と warnings） / 2 = 通らない。
+入力は標準入力の候補本文、引数の playbook.yml、正本のpathだけである。索引は同じdirectoryの source.py の build_index で
+正本から毎回導き、索引fileも候補fileも受け取らない。
+
+exit 0 = 通った（stdoutに verified と warnings） / 2 = 標準入力が空、正本が契約の節を持たない、または述語が成り立たない（診断は標準エラー）。
 """
 
 from __future__ import annotations
@@ -27,6 +30,9 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from source import build_index  # noqa: E402  同じdirectoryの索引器。正本から検査の正解を導く
 
 HEADING = re.compile(r"^(#{1,6})[ ]+(.+?)[ ]*$")
 BDD_ID = re.compile(r"BDD-\d{3,}")
@@ -44,11 +50,13 @@ def load_playbook(config_path: Path) -> dict:
     return resolved
 
 
-def read_regular(raw: str, label: str) -> tuple[Path, str]:
-    path = Path(raw)
-    if not path.is_absolute() or path.is_symlink() or not path.is_file():
-        raise ValueError(f"{label}が絶対pathの通常ファイルではない: {raw}")
-    return path.resolve(), path.read_text(encoding="utf-8")
+def read_stdin() -> str:
+    if sys.stdin.isatty():
+        raise ValueError("候補モデル本文を標準入力で渡す")
+    body = sys.stdin.read()
+    if not body.strip():
+        raise ValueError("標準入力が空。候補モデル本文を標準入力で渡す")
+    return body
 
 
 def strip_markup(text: str) -> str:
@@ -190,8 +198,7 @@ def names_in(cell: str) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--playbook", required=True)
-    parser.add_argument("--candidate", required=True)
-    parser.add_argument("--source-index", required=True)
+    parser.add_argument("--source", required=True)
     args = parser.parse_args()
     warnings: list[str] = []
     try:
@@ -204,10 +211,9 @@ def main() -> int:
         op_fields = list(contract["operation_fields"])
         forbidden = set(contract["forbidden_sections"])
 
-        path, body = read_regular(args.candidate, "候補モデル")
-        index_path, index_text = read_regular(args.source_index, "索引")
-        index = json.loads(index_text)
+        index = build_index(Path(args.playbook), args.source)
         vocabulary = set(index["vocabulary"])
+        body = read_stdin()
 
         order, content, headings = split_sections(body)
         mixed = [title for _, title in headings if title in forbidden]
@@ -236,7 +242,7 @@ def main() -> int:
             if any(kind.startswith(ex) for ex in exceptional):
                 warnings.append(f"例外扱いの種別を使っている: {name}（{kind}）。捨てた割り当てに理由があるか読む")
             # Deterministic validation declaration:
-            # source=source.py JSON index; input=element name and source-term cells;
+            # source=index built by source.py from the domain-rule path; input=element name and source-term cells;
             # normalization=split comma/slash-separated source terms and strip markup;
             # predicate=every resulting word is an exact member of index.vocabulary;
             # diagnostic=the element and first absent word; positive=利用枠;
@@ -386,9 +392,9 @@ def main() -> int:
         # 未決
         if not nonempty(content["未決"]):
             raise ValueError("未決の節が空。0件なら「なし」と書く")
-    except (KeyError, OSError, ValueError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+    except (KeyError, OSError, UnicodeDecodeError, ValueError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
         return fail(str(exc))
-    print(json.dumps({"verified_model_path": str(path), "warnings": warnings}, ensure_ascii=False))
+    print(json.dumps({"verified": True, "source_path": index["source_path"], "warnings": warnings}, ensure_ascii=False))
     return 0
 
 
