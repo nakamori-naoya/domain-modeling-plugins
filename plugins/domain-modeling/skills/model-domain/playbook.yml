@@ -1,26 +1,15 @@
 # model-domain — domain-rule正本の業務概念を戦術DDDの要素へ割り当て、契約つきのドメインモデル資料を1本保存する。
-#
-# **この playbook は個々の手順を知らない。** 何を、どの順で呼ぶかだけを持つ。
-# 外部packageへは公開playbookでだけ依存する。grillとwrite-docの
-# 内部skill・工程id・保存モード名・script引数には触れない。
+# 工程順と入出力、scriptが読む契約（contract）だけを持つ。判断規律はSKILL.mdとreferencesが持つ。
 version: 2
 name: model-domain
 description: domain-rule正本を1本受け取り、業務概念を値オブジェクト・エンティティ・集約・ドメインイベントへ割り当て、各要素の目的・境界・不変条件・操作の契約を言語非依存で書いたドメインモデル資料を1本保存する
 inputs: [domain_rule_path, user_input, existing_document_path, output_directory, name]
-document_type: domain-model
-output_format: markdown
-instructions:
-  execution:
-    directive: stepsを上から順に実行し、needsを前工程のprovidesから受け取る。正本の明示索引に無い語を要素にせず、検査を通るまで完成扱いにしない
-  interaction:
-    directive: 正本と索引から分かることを聞かず、両方を読んでも決まらない割り当て（集約の境界、型の分割、索引に無い語の扱い）をgrillで1問ずつ確かめる
 
 requires:
   - {plugin: grill, marketplace: grill}
-  - {plugin: domain-model, marketplace: domain-modeling}
   - {plugin: write-doc, marketplace: write-doc}
 
-# 下段どうしをつなぐ契約。playbook が持つ。
+# scriptが読む契約。source.pyはsource_sections、verify.pyはmodel_sections以下、cleanup.pyはcleanupを読む。
 contract:
   # 正本（domain-rule）から索引に拾う節。左が索引の役、右が正本の見出し。
   source_sections:
@@ -46,13 +35,7 @@ contract:
     delete_after_document: [source_index, candidate_model_path]
     preserve: [domain_model_document_path]
 
-requirements:
-  input_grounded: true
-  clarify_with_grill: true
-  exclude_implementation: true
-
 # stepsは上から実行する。needsは開始条件、providesは次工程へ渡す成果物。
-# skillは自己完結した手順、scriptは決定的処理、playbookは入れ子の段取り。
 steps:
   - id: prepare-work-directory
     agent_work: invoking_agent
@@ -87,7 +70,7 @@ steps:
     playbook: write-doc
     purpose: 同じagentが検査済み本文をkind:textのmaterialにし、更新ならexisting_document_pathだけ、新規ならoutput_directoryとnameだけを直接渡してdomain-model型の資料を1本保存する
     input:
-      document_type: ${.document_type}
+      document_type: domain-model
     needs: [final_markdown, validation_report]
     conditional_needs:
       - when: existing_document_path

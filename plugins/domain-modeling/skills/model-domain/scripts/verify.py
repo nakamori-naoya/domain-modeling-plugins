@@ -14,7 +14,7 @@
   - 正本の全BDDが対応表か「対応しないBDD」に現れ、全要素が対応表か「対応のない要素・操作」に現れる
   - 未決の節が空でない（「なし」を含む）
 
-  verify.py --config <解決済みYAML> --candidate <候補モデルの絶対path> --source-index <索引の絶対path>
+  verify.py --playbook <同じdirectoryのplaybook.yml> --candidate <候補モデルの絶対path> --source-index <索引の絶対path>
 
 exit 0 = 通った（stdoutに verified_model_path と warnings） / 2 = 通らない。
 """
@@ -41,7 +41,7 @@ def load_playbook(config_path: Path) -> dict:
     result = subprocess.run(["yq", "-o=json", "-I=0", ".", str(config_path)],
                             check=True, capture_output=True, text=True)
     resolved = json.loads(result.stdout)
-    return resolved.get("playbook", resolved)
+    return resolved
 
 
 def read_regular(raw: str, label: str) -> tuple[Path, str]:
@@ -189,13 +189,13 @@ def names_in(cell: str) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", required=True)
+    parser.add_argument("--playbook", required=True)
     parser.add_argument("--candidate", required=True)
     parser.add_argument("--source-index", required=True)
     args = parser.parse_args()
     warnings: list[str] = []
     try:
-        playbook = load_playbook(Path(args.config))
+        playbook = load_playbook(Path(args.playbook))
         contract = playbook["contract"]
         expected = list(contract["model_sections"])
         kinds = set(contract["element_kinds"])

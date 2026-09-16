@@ -12,7 +12,7 @@
 - 正本に無い語（「〜ロット」「〜マネージャ」）が要素として増えていく
 - 契約による設計をしたいが、事前条件・事後条件・拒む理由を書く場所が無い
 
-業務知識の発見・反証（`discover-domain` / `formulate-domain`）、永続化（`discover-data-model`）、実装コード、層構成、画面、APIは扱わない。
+業務知識の発見・反証、永続化、実装コード、層構成、画面、APIは扱わない。
 
 ## 公開入口
 
@@ -21,7 +21,7 @@
 | domain-rule正本があり、ドメインモデル資料を初めて作る | `model-domain` | 契約つきのdomain-model資料 |
 | 既存のドメインモデル資料を、更新された正本に追従させる | `model-domain`（既存資料のpathを渡す） | 同じパスへ更新されたdomain-model資料 |
 
-反証で新しい業務の事実が出たら、それはこの入口では扱わず、domain-rule側の`formulate-domain`へ戻す。モデル資料は正本の写像であり、正本を2つにしない。
+反証で新しい業務の事実が出たら、それはこの入口では扱わず、domain-rule側の反証へ戻す。モデル資料は正本の写像であり、正本を2つにしない。保存先は依頼で示すか、示されなければ入口が既存資料の構成を読んで一度だけ提案する。
 
 ## 利用例
 
@@ -43,13 +43,13 @@ docs/domain/order-cancellation.md を正本に、ドメインモデル資料を�
 6. **write-doc** — `domain-model`型の資料を1本保存する
 7. **後片付け** — 自分の中間成果物だけを削除する
 
-割り当ての規律（正本に無い語を要素にしない／形が同じでも概念・コンテキストが違えば分ける／集合への規則を1件に持たせない／確認と変更を分けない／既定は不変で状態を持つのは集約だけ／BDDに対応しない要素は残さない／集約どうしの協働は手段を明記する／データの持ち方の語で業務の事実を書かない）は、[割り当ての規律](plugins/skills/domain/domain-model/references/disciplines.md)に該当条件・行動・非該当条件つきで置く。正本の節からモデル要素への対応は[対応規則](plugins/skills/domain/domain-model/references/mapping.md)にある。
+割り当ての規律（正本に無い語を要素にしない／形が同じでも概念・コンテキストが違えば分ける／集合への規則を1件に持たせない／確認と変更を分けない／既定は不変で状態を持つのは集約だけ／BDDに対応しない要素は残さない／集約どうしの協働は手段を明記する／データの持ち方の語で業務の事実を書かない）は、[割り当ての規律](plugins/domain-modeling/skills/model-domain/references/disciplines.md)に該当条件・行動・非該当条件つきで置く。正本の節からモデル要素への対応は[対応規則](plugins/domain-modeling/skills/model-domain/references/mapping.md)にある。
 
 ## インストール
 
 インストールするのは`domain-modeling@domain-modeling`です。外部の工程を実行するため、`grill@grill`、`write-doc@write-doc`も必要です。下のコマンドには、それらも含めています。正本を作る`bdd-discovery-and-formulation@bdd-discovery-and-formulation`は実行時の依存ではないので含めていません。
 
-内部のスキルは同梱されています。個別にインストールせず、公開入口から利用してください。
+公開入口は`model-domain`の1つで、内部skillは持ちません。
 
 ### Codex
 
@@ -101,7 +101,7 @@ claude plugin update domain-modeling@domain-modeling --scope "$CLAUDE_PLUGIN_SCO
 
 ## 公開インストール単位と内包する機能
 
-利用者がインストールするのは`domain-modeling@domain-modeling`だけである。`model-domain` playbookと、その実行に使う`domain-model` skillは同じpackageへ内包する。内部機能をmarketplaceの個別インストール対象にはしない。中間生成物の後片付けは、playbookが自分の`scripts/cleanup.py`で行う。
+利用者がインストールするのは`domain-modeling@domain-modeling`だけである。packageは`plugins/domain-modeling/`にあり、公開入口`skills/model-domain/`が`SKILL.md`（目的・入力・判断基準・手順・停止条件・出力）、`playbook.yml`（工程順・入出力・scriptが読む契約）、`references/`（割り当ての規律、対応規則、要素ごとの問い、成果物の形、実行指示書）、`scripts/`（`source.py`索引、`verify.py`検査、`cleanup.py`後片付け）を持つ。設定fileは持たず、保存先は公開入力で受け取る。中間生成物はsystem temporary directory内のrun専用directoryに置き、保存成功後に`scripts/cleanup.py`が宣言された論理名の成果物だけを削除する。
 
 ## 検証
 
@@ -109,6 +109,6 @@ claude plugin update domain-modeling@domain-modeling --scope "$CLAUDE_PLUGIN_SCO
 bash scripts/validate.sh
 ```
 
-配布構造、公開manifest、依存の解決（実配布物の兄弟checkout `../grill-plugins` と `../write-doc-plugins` が要る）、負の試験、消費側契約lint、所有scriptの典型例・負例・境界例を実行する。実行基盤は`product-planning-plugins/shared/runtime-source`を正本とし、`scripts/sync-runtime.py --check`で複製の一致を検査する。
+配布manifest、隣接`playbook.yml`の宣言と`script:`参照の実在、禁止参照形の不在、構文、消費側契約lint（実配布物の兄弟checkout `../grill-plugins/plugins/grill` と `../write-doc-plugins/plugins/write-doc` が要る）、所有script（`source.py` / `verify.py` / `cleanup.py`）の典型例・負例・境界例を実行する。保守toolは`product-planning-plugins/shared/runtime-source`を正本とし、`scripts/sync-runtime.py --check`で複製の一致を検査する。workspace rootの`bash scripts/validate.sh <このrepositoryの絶対path>`が配置・manifest・隣接playbook.yml・禁止参照形の構造契約を検査する。
 
 [意味評価fixture](evals/scenarios.json)は`scripts/evaluate-skills.py`で生成modelと独立judgeへ渡し、入力、応答、criterionごとの逐語quoteとreasonを記録する。runnerのexit 0は全caseの記録完了だけを示し、品質承認を示さない。criterionの真偽は人またはagentが記録を再読して採否を判断するための意味証拠である。adapter非zero、不正な応答、根拠不整合など記録を完了できない操作失敗は非zeroで終了する。

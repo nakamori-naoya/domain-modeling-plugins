@@ -35,10 +35,14 @@ import sys
 FIXED_VOCABULARY = {
     "write-doc": ("save-vocabulary", [
         "replace-existing-target", "--template", "--output-dir",
-        "write-doc.sh", "render-meta.py", '"decision":"exists"', "logical_update_target",
+        '"decision":"exists"', "logical_update_target", "author-document",
+    ]),
+    "grill": ("dialogue-internal", [
+        "ask-until-agreed",
     ]),
     "agent-work-policy": ("policy-internal", [
         "control.py", "POLICY_ROOT", "--policy-root", "operation-contract.md",
+        "apply-work-policy", "work-policy-control",
     ]),
 }
 
@@ -55,8 +59,7 @@ ASSIGN = re.compile(
 
 def load_resolver(repo: Path):
     candidates = [repo / "shared/playbook/resolve-dependency.py",
-                  repo / "shared/runtime-source/resolve-dependency.py",
-                  *sorted(repo.glob("plugins/**/scripts/resolve-dependency.py"))]
+                  repo / "shared/runtime-source/resolve-dependency.py"]
     for candidate in candidates:
         if candidate.is_file():
             sys.dont_write_bytecode = True
@@ -166,7 +169,7 @@ def public_skill_names(package_root: Path, runtime: str) -> set[str]:
     names: set[str] = set()
     for relative in declared:
         member = package_root / str(relative)
-        for skill in [member / "SKILL.md", *member.glob("*/SKILL.md")]:
+        for skill in [member / "SKILL.md"]:
             if skill.is_file():
                 name = skill_name(skill)
                 if name:
@@ -174,16 +177,18 @@ def public_skill_names(package_root: Path, runtime: str) -> set[str]:
     return names
 
 
-def own_marketplace(repo: Path, runtime: str) -> tuple[str | None, dict]:
-    manifest = repo / f"plugins/.{runtime}-plugin/plugin.json"
-    if not manifest.is_file():
-        return None, {}
+def own_marketplace(repo: Path, runtime: str) -> str | None:
+    """自 repository の marketplace 名。両 catalog の name が正本（plugin-package-contract.md）。"""
+    relative = ".agents/plugins/marketplace.json" if runtime == "codex" else ".claude-plugin/marketplace.json"
+    catalog = repo / relative
+    if not catalog.is_file():
+        return None
     try:
-        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data = json.loads(catalog.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return None, {}
-    harness = (data.get("metadata") or {}).get("harness") or {}
-    return harness.get("marketplace"), harness
+        return None
+    name = data.get("name") if isinstance(data, dict) else None
+    return name if isinstance(name, str) and name else None
 
 
 def resolve_provider(module, playbook_root: Path, marketplace: str, plugin: str, runtime: str):
@@ -252,8 +257,7 @@ def scan(repo: Path, runtime: str) -> list[dict]:
     module = load_resolver(repo)
     if module is None:
         raise ValueError("参照構文の共通解析に resolve-dependency.py が要る: " + str(repo))
-    declared_market, harness = own_marketplace(repo, runtime)
-    internals = set((harness.get("internalPlugins") or {}))
+    declared_market = own_marketplace(repo, runtime)
     external_logical: dict[str, dict] = {}
     # 内部依存は §3 のとおり外部規則の対象外だが、`.skills.<名前>` だけは実在を見る。
     # 値は解決できた公開skill名の集合、解決できなければ None（判定しない）。

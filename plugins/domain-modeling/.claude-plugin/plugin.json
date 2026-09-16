@@ -6,24 +6,11 @@
     "name": "NaoyaNakamori"
   },
   "skills": [
-    "./playbooks/domain/model-domain"
+    "./skills/model-domain"
   ],
-  "interface": {
-    "displayName": "Playbook Package",
-    "capabilities": [
-      "Skills"
-    ]
-  },
   "metadata": {
     "harness": {
-      "installationSurface": "playbook-package",
       "marketplace": "domain-modeling",
-      "playbooks": {
-        "model-domain": "./playbooks/domain/model-domain"
-      },
-      "internalPlugins": {
-        "domain-model": "./skills/domain/domain-model"
-      },
       "contractVersion": 1
     }
   }
