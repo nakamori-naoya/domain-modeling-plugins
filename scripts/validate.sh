@@ -39,8 +39,9 @@ while IFS= read -r script; do PYTHONPYCACHEPREFIX="$TMP_ROOT/pycache" python3 -m
 # 検出語は手書きせず、外部依存として実在するproviderのmanifestから作るので、依存先の実配布物が要る。
 lint_consumer_contract() {
   local map="$TMP_ROOT/lint-dev-map.json"
-  local grill="$ROOT/../grill-plugins/plugins/grill"
-  local write_doc="$ROOT/../write-doc-plugins/plugins/write-doc"
+  local grill write_doc
+  for grill in "$ROOT/../grill-plugins/plugins/grill" "$ROOT/../../grill-plugins/plugins/grill"; do [ -d "$grill" ] && break; done
+  for write_doc in "$ROOT/../write-doc-plugins/plugins/write-doc" "$ROOT/../../write-doc-plugins/plugins/write-doc"; do [ -d "$write_doc" ] && break; done
   if [ ! -d "$grill" ] || [ ! -d "$write_doc" ]; then
     echo "[error] 依存先の配布物checkout（grill-plugins / write-doc-plugins）が無い。fixtureだけで緑にしない" >&2
     return 1
