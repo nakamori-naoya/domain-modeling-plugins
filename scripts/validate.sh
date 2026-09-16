@@ -41,6 +41,9 @@ lint_consumer_contract() {
   local map="$TMP_ROOT/lint-dev-map.json"
   local grill write_doc parent
   grill= write_doc=
+  parent="${GITHUB_WORKSPACE:-$ROOT}"
+  [ -d "$parent/grill-plugins/plugins/grill" ] && grill="$parent/grill-plugins/plugins/grill"
+  [ -d "$parent/write-doc-plugins/plugins/write-doc" ] && write_doc="$parent/write-doc-plugins/plugins/write-doc"
   parent="$ROOT"
   for _ in 1 2 3 4; do
     [ -z "$grill" ] && [ -d "$parent/grill-plugins/plugins/grill" ] && grill="$parent/grill-plugins/plugins/grill"
