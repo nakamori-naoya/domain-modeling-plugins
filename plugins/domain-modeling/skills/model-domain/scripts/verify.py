@@ -12,6 +12,8 @@
   - 詳細にあって一覧に無い要素が無い
   - 集約が2つ以上なら「集約どうしの協働」の表があり、手段が契約の値（識別子で参照／値として渡す／ドメインイベント／呼び手が両方を操作）に収まる
   - 正本の全BDDが対応表か「対応しないBDD」に現れ、全要素が対応表か「対応のない要素・操作」に現れる
+  - 「正本へ提案する概念」に契約の4列の表があるか「なし」と書かれ、提案した語は要素一覧の要素名・正本の語に現れず、
+    提案が引くBDD番号は正本にあり、足す先の節は正本の契約の節名である
   - 未決の節が空でない（「なし」を含む）
 
   verify.py --playbook <同じdirectoryのplaybook.yml> --source <domain-rule正本の絶対path>  < <候補モデル本文（Markdown）>
@@ -226,6 +228,44 @@ def main() -> int:
         if empty:
             raise ValueError("空の節がある: " + ", ".join(empty))
 
+        # 正本へ提案する概念（要素一覧より先に読み、提案した語が要素に混ざっていないかを要素一覧の走査で見る）
+        # Deterministic validation declaration:
+        # source=contract.proposal_columns, contract.source_sections (正本の見出し), and the BDD ids indexed from the domain-rule path;
+        # input=the 「正本へ提案する概念」 section (table rows or the literal 「なし」) and the 要素一覧 table;
+        # normalization=strip markup, split 「足す先」 and 「要素の語」 cells on 、,／/, BDD regex extraction;
+        # predicate=(a) section has the 4-column table with no blank cell, or is 「なし」; (b) no proposed concept equals an
+        # element name or a 正本の語 cell of 要素一覧; (c) every BDD id cited by a proposal exists in the index; (d) every 足す先
+        # is a source section heading; diagnostic=the proposal and the offending word/id/section; positive=会議室 proposed and
+        # absent from 要素一覧; negative=会議室 proposed and also listed as an element; boundary=「なし」 passes, a proposal whose
+        # name is already in the index passes with a neutral warning. Whether the proposal is necessary is semantic.
+        proposal_columns = list(contract["proposal_columns"])
+        source_headings = set(contract["source_sections"].values())
+        proposal_lines = content["正本へ提案する概念"]
+        proposal_tables = [table for table in tables(proposal_lines) if table["header"][:len(proposal_columns)] == proposal_columns]
+        proposals: dict[str, dict] = {}
+        if proposal_tables and proposal_tables[0]["rows"]:
+            for row in proposal_tables[0]["rows"]:
+                if len(row) < len(proposal_columns) or not all(row[:len(proposal_columns)]):
+                    raise ValueError("正本へ提案する概念の行に空欄がある: " + " | ".join(row))
+                concept = row[0]
+                if concept in proposals:
+                    raise ValueError("正本へ提案する概念に同じ概念が2度ある: " + concept)
+                unknown_ids = sorted(bdd for bdd in BDD_ID.findall(row[2]) if bdd not in set(index["bdd"]))
+                if unknown_ids:
+                    raise ValueError(f"正本へ提案する概念「{concept}」が引くBDD番号が正本に無い: " + ", ".join(unknown_ids))
+                targets = names_in(row[3])
+                bad_targets = [target for target in targets if target not in source_headings]
+                if not targets or bad_targets:
+                    raise ValueError(f"正本へ提案する概念「{concept}」の足す先が正本の節名ではない: " + ", ".join(bad_targets or [row[3]])
+                                     + "（許す値: " + "／".join(contract["source_sections"].values()) + "）")
+                if concept in vocabulary:
+                    warnings.append(f"正本へ提案する概念「{concept}」は正本の索引に既にある。提案が節の追加なのか、要素にすべき語なのかを同じagentが読み返す")
+                proposals[concept] = {"targets": targets}
+        else:
+            literal_none = [line.strip() for line in proposal_lines if line.strip() and not line.strip().startswith("<!--")]
+            if literal_none != ["なし"]:
+                raise ValueError("正本へ提案する概念に「" + " | ".join(proposal_columns) + "」の表が無い。0件なら「なし」とだけ書く")
+
         # 要素一覧
         listing = [table for table in tables(content["要素一覧"]) if table["header"][:2] == ["要素", "種別"]]
         if not listing or not listing[0]["rows"]:
@@ -237,6 +277,9 @@ def main() -> int:
             name, kind, term, purpose = row[0], row[1], row[2], row[3]
             if name in elements:
                 raise ValueError("要素一覧に同じ要素が2度ある: " + name)
+            mixed_proposal = sorted({word for word in [name] + names_in(term) if word in proposals})
+            if mixed_proposal:
+                raise ValueError(f"正本へ提案する概念の語が要素一覧に混ざっている: {', '.join(mixed_proposal)}（要素「{name}」）。提案した語は要素にせず、正本へ足してから要素にする")
             if not any(kind.startswith(allowed) for allowed in kinds):
                 raise ValueError(f"要素「{name}」の種別が契約の外: {kind}")
             if any(kind.startswith(ex) for ex in exceptional):

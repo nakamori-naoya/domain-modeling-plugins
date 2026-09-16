@@ -2,7 +2,7 @@
 # model-domain が所有する script（source.py / verify.py）を、典型例・負例・境界例で実行する。
 # 正本: playbook.yml の contract と domain-rule 正本。入力: 正本path（source.py）、正本path＋標準入力の候補本文（verify.py）。
 # 正規化: 見出し・表・箇条書きの機械抽出。合格述語: verify.py 冒頭の一覧。診断: 標準エラー。
-# 正例: fixtures/domain-model.md。反例: 索引外の語、空欄、節の順序、未宣言BDD。境界例: 空stdin、正本path欠落、旧形の --candidate 引数。
+# 正例: fixtures/domain-model.md（正本へ提案する概念を2件持つ）。反例: 索引外の語、空欄、節の順序、未宣言BDD、提案した語が要素一覧に混ざる、提案の表の欠落・不正なBDD番号・不正な足す先。境界例: 空stdin、正本path欠落、旧形の --candidate 引数、提案0件の「なし」、索引に既にある語の提案。
 # 検査するのは述語であって、モデルの良し悪しではない。
 set -uo pipefail
 
@@ -58,9 +58,41 @@ expect_fail_stdin "$FIX/domain-model.md" python3 "$PB/scripts/verify.py" --playb
 expect_fail_stdin "$FIX/domain-model.md" python3 "$PB/scripts/verify.py" --playbook "$PB/playbook.yml" --source "$TMP/order.md" --source-index "$TMP/index.json"
 expect_fail_stdin "$FIX/domain-model.md" python3 "$PB/scripts/verify.py" --playbook "$PB/playbook.yml" --source "$TMP/order-noinv.md"
 
-# 境界例: 正本本文には現れるが、明示索引に無い「会議室」を要素名にしても拒否する。
-sed 's/^| 利用枠 | 値オブジェクト | 利用枠 |/| 会議室 | 値オブジェクト | 会議室 |/; s/^### 利用枠$/### 会議室/' "$FIX/domain-model.md" > "$TMP/model-prose-only.md"
+# 境界例: 正本本文には現れるが、明示索引に無い「予約者」を要素名にしても拒否する。
+sed 's/^| 利用枠 | 値オブジェクト | 利用枠 |/| 予約者 | 値オブジェクト | 予約者 |/; s/^### 利用枠$/### 予約者/' "$FIX/domain-model.md" > "$TMP/model-prose-only.md"
 expect_verify_stderr "索引に無い" "$TMP/model-prose-only.md"
+
+# ── 正本へ提案する概念（D2）: 正例は fixture（会議室・繰上げの不成立を提案し、要素一覧には無い） ──
+# 負例: 提案した語（会議室）を要素一覧にも載せる → 索引外より先に「混ざっている」で拒否
+sed 's/^| 利用枠 | 値オブジェクト | 利用枠 |/| 会議室 | 値オブジェクト | 会議室 |/; s/^### 利用枠$/### 会議室/' "$FIX/domain-model.md" > "$TMP/model-proposal-mixed.md"
+expect_verify_stderr "正本へ提案する概念の語が要素一覧に混ざっている" "$TMP/model-proposal-mixed.md"
+# 負例: 提案の節に表も「なし」も無い
+python3 - "$FIX/domain-model.md" "$TMP/model-proposal-empty.md" <<'PY'
+import sys, re
+t = open(sys.argv[1], encoding="utf-8").read()
+t = re.sub(r"(## 正本へ提案する概念\n\n)(?:\|.*\n)+", r"\1提案は本文のどこかに書いた。\n", t)
+open(sys.argv[2], "w", encoding="utf-8").write(t)
+PY
+expect_verify_stderr "正本へ提案する概念に「概念 | なぜ要るか | 導いた業務ルール・BDD | 正本のどの節へ足すか」の表が無い" "$TMP/model-proposal-empty.md"
+# 境界例: 提案が0件なら「なし」とだけ書けば通る
+python3 - "$FIX/domain-model.md" "$TMP/model-proposal-none.md" <<'PY'
+import sys, re
+t = open(sys.argv[1], encoding="utf-8").read()
+t = re.sub(r"(## 正本へ提案する概念\n\n)(?:\|.*\n)+", r"\1なし\n", t)
+open(sys.argv[2], "w", encoding="utf-8").write(t)
+PY
+expect_verify_ok "$TMP/model-proposal-none.md"
+# 負例: 提案が引くBDD番号が正本に無い
+sed 's/業務ルール「予約待ち」の繰上げ、BDD-007/業務ルール「予約待ち」の繰上げ、BDD-099/' "$FIX/domain-model.md" > "$TMP/model-proposal-badbdd.md"
+expect_verify_stderr "引くBDD番号が正本に無い: BDD-099" "$TMP/model-proposal-badbdd.md"
+# 負例: 足す先が正本の節名ではない（実装の節）
+sed 's/^\(| 繰上げの不成立 | .* | \)業務イベント、BDD |$/\1テーブル定義 |/' "$FIX/domain-model.md" > "$TMP/model-proposal-badtarget.md"
+grep -q 'テーブル定義 |$' "$TMP/model-proposal-badtarget.md" || ng "fixture edit for bad target did not apply"
+expect_verify_stderr "足す先が正本の節名ではない: テーブル定義" "$TMP/model-proposal-badtarget.md"
+# 境界例: 提案した語が既に索引にある（無断不利用。要素ではない）→ 通るが warning に出る
+sed 's/^| 繰上げの不成立 | /| 無断不利用 | /' "$FIX/domain-model.md" > "$TMP/model-proposal-indexed.md"
+verify "$TMP/model-proposal-indexed.md" 2>"$TMP/err" \
+  | jq -e '.warnings | any(contains("正本へ提案する概念「無断不利用」は正本の索引に既にある"))' >/dev/null && ok "indexed proposal passes with neutral warning" || ng "indexed proposal: $(head -2 "$TMP/err")"
 
 # 負例1: 正本に無い語を要素にする
 sed 's/^| 利用枠 | 値オブジェクト | 利用枠 |/| 用紙ロット | 値オブジェクト | 用紙ロット |/; s/^### 利用枠$/### 用紙ロット/' "$FIX/domain-model.md" > "$TMP/model-unknown.md"
