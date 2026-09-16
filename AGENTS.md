@@ -10,4 +10,4 @@
 - `write-doc`と`grill`は同梱せず、`playbook.yml`の`requires`と`playbook:`工程だけで依存する。相手の内部skill名・工程id・references・config・保存モード名・scriptの引数・exit codeは文書にもscriptにも書かない。`grill`は契約v1の入力objectを公開入口へ直接渡し、`write-doc`は契約v2のobject配列の素材と排他的な新規／更新保存先を公開入口へ直接渡し、直接結果を受け取る。
 - 正本を作る`bdd-discovery-and-formulation`は実行時の依存ではなく、その資料の絶対pathを入力として受け取るだけである。正本の明示索引に無い語を要素にせず、新しい業務の事実が要ると分かったら仮説を未決に残して資料を完成させ、正本の反証を提案する。
 - agentが作った候補本文は検査scriptへ標準入力で渡す。作業directory、一時file、後片付け工程を置かない。
-- 変更後は`bash scripts/validate.sh`と、workspace rootの`bash scripts/validate.sh <このrepositoryの絶対path>`を実行する。違反は`scripts/lint-consumer-contract.py`と`tests/test-domain-modeling.sh`が落とす。
+- 変更後は`bash scripts/validate.sh`と、workspace rootの`bash scripts/validate.sh <このrepositoryの絶対path>`を実行する。保守tool（root validator、消費側契約lint、回帰検査、release、eval runner）の正本は兄弟checkout `../harness-tools/tools/` だけで、このrepositoryは複製を持たない。違反は`../harness-tools/tools/lint-consumer-contract.py`と`tests/test-domain-modeling.sh`が落とす。

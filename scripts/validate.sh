@@ -12,10 +12,12 @@ failed=0
 PACKAGE="$ROOT/plugins/domain-modeling"
 ENTRY="$PACKAGE/skills/model-domain"
 
-# 保守用の共有tool（正本はproduct-planning-plugins/shared/runtime-source）。
-python3 "$ROOT/scripts/test-hardening.py" || failed=1
-bash "$ROOT/scripts/validate-marketplace.sh" "$ROOT" || failed=1
-bash "$ROOT/scripts/test-marketplace-validation.sh" || failed=1
+# 保守toolの正本は兄弟checkout harness-tools だけ。複製を持たず、無ければ止まる（fixtureで代用しない）。
+TOOLS="$ROOT/../harness-tools/tools"
+[ -d "$TOOLS" ] || { echo "[error] 兄弟 checkout harness-tools が無い: $TOOLS" >&2; exit 2; }
+python3 "$TOOLS/validate-plugin-repository.py" "$ROOT" || failed=1
+python3 "$TOOLS/validate-plugin-repository.py" --self-test || failed=1
+python3 "$TOOLS/test-hardening.py" --repository "$ROOT" || failed=1
 
 # 公開入口の隣接playbook.yml: version 2、requiresは外部packageだけ、stepsのscriptは入口scripts/配下に実在する。
 pb="$ENTRY/playbook.yml"
@@ -36,31 +38,17 @@ while IFS= read -r script; do PYTHONPYCACHEPREFIX="$TMP_ROOT/pycache" python3 -m
 
 # ── 消費側の契約lint — 実際の配布物から検出語を作る ─────────────────────
 # lintはSKILL.md・README・references・scripts・.harness-plugins配下の設定を含む全行を見る。
-# 検出語は手書きせず、外部依存として実在するproviderのmanifestから作るので、依存先の実配布物が要る。
+# 検出語は手書きせず、外部依存として実在するproviderのmanifestから作るので、依存先の兄弟checkoutが要る。無ければ緑にせず失敗させる。
 lint_consumer_contract() {
-  local map="$TMP_ROOT/lint-dev-map.json"
-  local grill write_doc parent
-  grill= write_doc=
-  parent="${GITHUB_WORKSPACE:-$ROOT}"
-  [ -d "$parent/grill-plugins/plugins/grill" ] && grill="$parent/grill-plugins/plugins/grill"
-  [ -d "$parent/write-doc-plugins/plugins/write-doc" ] && write_doc="$parent/write-doc-plugins/plugins/write-doc"
-  parent="$ROOT"
-  for _ in 1 2 3 4; do
-    [ -z "$grill" ] && [ -d "$parent/grill-plugins/plugins/grill" ] && grill="$parent/grill-plugins/plugins/grill"
-    [ -z "$write_doc" ] && [ -d "$parent/write-doc-plugins/plugins/write-doc" ] && write_doc="$parent/write-doc-plugins/plugins/write-doc"
-    parent="$(dirname "$parent")"
+  local map="$TMP_ROOT/lint-dev-map.json" status=0 runtime
+  local grill="$ROOT/../grill-plugins/plugins/grill" write_doc="$ROOT/../write-doc-plugins/plugins/write-doc"
+  for provider in "$grill" "$write_doc"; do
+    [ -d "$provider" ] || { echo "[error] 依存先の配布物checkoutが無い: $provider" >&2; return 1; }
   done
-  if [ ! -d "$grill" ] || [ ! -d "$write_doc" ]; then
-    echo "[skip] 依存先checkoutが無いため消費側契約lintを省略（依存checkout付きCIで実施）" >&2
-    return 0
-  fi
-  grill=$(cd "$grill" && pwd -P)
-  write_doc=$(cd "$write_doc" && pwd -P)
-  jq -n --arg g "$grill" --arg w "$write_doc" \
+  jq -n --arg g "$(cd "$grill" && pwd -P)" --arg w "$(cd "$write_doc" && pwd -P)" \
     '{schema:1,dependencies:{"grill/grill":$g,"write-doc/write-doc":$w}}' > "$map" || return 1
-  local status=0 runtime
   for runtime in claude codex; do
-    HARNESS_PLUGIN_DEV_ROOTS="$map" python3 "$ROOT/scripts/lint-consumer-contract.py" \
+    HARNESS_PLUGIN_DEV_ROOTS="$map" python3 "$TOOLS/lint-consumer-contract.py" \
       --repo "$ROOT" --runtime "$runtime" || status=1
   done
   return "$status"
