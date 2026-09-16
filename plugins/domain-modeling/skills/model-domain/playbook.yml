@@ -1,0 +1,86 @@
+# model-domain — domain-rule正本の業務概念を戦術DDDの要素へ割り当て、契約つきのドメインモデル資料を1本保存する。
+# 工程順と入出力、scriptが読む契約（contract）だけを持つ。判断規律はSKILL.mdとreferencesが持つ。
+version: 2
+name: model-domain
+description: domain-rule正本を1本受け取り、業務概念を値オブジェクト・エンティティ・集約・ドメインイベントへ割り当て、各要素の目的・境界・不変条件・操作の契約を言語非依存で書いたドメインモデル資料を1本保存する
+inputs: [domain_rule_path, user_input, existing_document_path, output_directory, name]
+
+requires:
+  - {plugin: grill, marketplace: grill}
+  - {plugin: write-doc, marketplace: write-doc}
+
+# scriptが読む契約。source.pyはsource_sections、verify.pyはmodel_sections以下、cleanup.pyはcleanupを読む。
+contract:
+  # 正本（domain-rule）から索引に拾う節。左が索引の役、右が正本の見出し。
+  source_sections:
+    terms: 業務用語
+    events: 業務イベント
+    concepts: 概念
+    invariants: 常に守られること
+    states: 状態と、その移り変わり
+    actors: 誰が行えるか
+    rules: 業務ルール
+    rejections: 拒むときの理由
+    open_questions: まだ決まっていないこと
+    bdd: BDD
+  model_sections: [目的と範囲, 要素一覧, モデル図, 各要素の詳細, 集約の境界, 状態と型の分割, ドメインイベント, BDDとの対応, 捨てた割り当て, 未決, この資料に書かないもの]
+  element_kinds: [値オブジェクト, エンティティ, 集約ルート, ドメインイベント, ドメインサービス]
+  # ドメインサービスは既定では使わない。使った要素は検査が報告に出す。
+  exceptional_kinds: [ドメインサービス]
+  element_items: [目的, 何でないか, 持つもの, 不変条件, 生成の条件, 協働相手]
+  operation_fields: [事前条件, 事後条件, 拒む理由, 発するイベント]
+  collaboration_means: [識別子で参照, 値として渡す, ドメインイベント, 呼び手が両方を操作]
+  forbidden_sections: [テーブル定義, 論理データモデル図, API, 画面, リポジトリ, 層構成]
+  cleanup:
+    delete_after_document: [source_index, candidate_model_path]
+    preserve: [domain_model_document_path]
+
+# stepsは上から実行する。needsは開始条件、providesは次工程へ渡す成果物。
+steps:
+  - id: prepare-work-directory
+    agent_work: invoking_agent
+    purpose: 同じagentがsystem temporary directory内にこのrun専用directoryを一つ作り、索引と検査候補だけの安全な作業領域にする
+    provides: [work_directory]
+
+  - id: index-source
+    script: scripts/source.py
+    purpose: 正本から業務用語・業務イベント・概念・常に守られること・状態・業務ルール・拒む理由・BDD番号・未決を機械的に抜き出し、割り当ての候補と検査の正解にする
+    needs: [domain_rule_path, work_directory]
+    provides: [source_index]
+
+  - id: settle
+    playbook: grill
+    purpose: 正本と索引だけでは決まらない割り当て（集約の境界、状態ごとの型の分割、索引に無い語の扱い、未決の要素）を利用者へ1問ずつ確かめ、明示合意した決定と未決を残す
+    needs: [domain_rule_path, user_input, source_index]
+    provides: [decisions, open_questions]
+
+  - id: assign
+    agent_work: invoking_agent
+    purpose: 同じagentが正本、索引、決定、未決を一つの文脈で読み、索引の語だけを要素にした契約どおりの本文を作り、検査用の一時ファイルへ同じ本文を書く
+    needs: [domain_rule_path, source_index, decisions, open_questions]
+    provides: [final_markdown, candidate_model_path]
+
+  - id: verify
+    script: scripts/verify.py
+    purpose: 節と順序、明示索引に無い要素名、要素ごとの必須項目、操作の契約、モデル図のクラスと要素の一致、BDDと要素の対応記載を構造検査し、通った候補だけを返す
+    needs: [candidate_model_path, source_index]
+    provides: [validation_report]
+
+  - id: document
+    playbook: write-doc
+    purpose: 同じagentが検査済み本文をkind:textのmaterialにし、更新ならexisting_document_pathだけ、新規ならoutput_directoryとnameだけを直接渡してdomain-model型の資料を1本保存する
+    input:
+      document_type: domain-model
+    needs: [final_markdown, validation_report]
+    conditional_needs:
+      - when: existing_document_path
+        needs: [existing_document_path]
+      - when: not existing_document_path
+        needs: [output_directory, name]
+    provides: [domain_model_document_path]
+
+  - id: cleanup
+    script: scripts/cleanup.py
+    purpose: 最終資料の保存を確認した後、contract.cleanupで削除候補にした自分の作業用成果物だけを削除し、最終資料を保持する
+    needs: [work_directory, source_index, candidate_model_path, domain_model_document_path]
+    provides: [cleanup_report]

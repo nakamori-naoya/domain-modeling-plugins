@@ -25,11 +25,9 @@ LOCK_ENTRY_KEYS = {
 }
 CAPABILITY_KEYS = {"document_type": "types", "action": "actions"}
 REQUIRED_IMPLEMENTATION_VERSIONS = {"write-doc/write-doc": 2}
-ENTRY_FILES_BY_CONTRACT = {
-    1: ("playbook.yml", "scripts/resolve.sh", "scripts/prepare.sh", "SKILL.md"),
-    2: ("playbook.yml", "SKILL.md"),
-}
-DIRECT_INVOCATION_CONTRACTS = {"grill/grill", "write-doc/write-doc"}
+# 公開 playbook の入口 file（plugin-package-contract.md）。契約版によらず同じ。
+ENTRY_FILES = ("playbook.yml", "CONTRACT.md", "SKILL.md")
+ENTRY_FILES_BY_CONTRACT = {1: ENTRY_FILES, 2: ENTRY_FILES}
 
 PROPERTY_REFERENCE = re.compile(r"^\$\{\s*(\.[A-Za-z0-9_.\[\]\"'-]+)\s*\}$")
 
@@ -51,8 +49,6 @@ DEP_ACCESSOR = re.compile(
 )
 # 依存先の解決済み YAML をプロパティで読む形。外部依存に対しては禁止する。
 CONFIG_REFERENCE = re.compile(r"\$\{\s*(?P<name>[A-Za-z0-9_-]+)\s*:")
-# 公開面は .root（直下の3ファイル）と .entry（入口SKILL.md）の2形だけ。
-ALLOWED_ROOT_SUFFIXES = {"", "/playbook.yml", "/scripts/prepare.sh", "/scripts/resolve.sh"}
 
 
 def dep_reference_segments(accessors: str) -> list[str]:
@@ -72,10 +68,10 @@ def dep_references(text: str):
 
 
 def dep_reference_allowed(segments: list[str], suffix: str) -> bool:
-    if segments == ["root"]:
-        return suffix in ALLOWED_ROOT_SUFFIXES
-    if segments == ["entry"]:
-        return suffix == ""
+    """外部依存への `${.deps...}` 参照は形を問わず許さない。
+
+    消費側が使えるのは公開契約（CONTRACT.md）の入口・入力・出力だけで、依存先の
+    path を文字列で組み立てる形は plugin-package-contract.md が禁止参照形として退ける。"""
     return False
 
 
@@ -84,8 +80,7 @@ def dep_reference_violation(
 ) -> str | None:
     """${.deps.<名前>…} を 1 件判定する。**resolver も lint もこの関数だけを使う。**
 
-    外部依存の公開面は `.root` 直下 3 点と `.entry` の 2 形だけで、それ以外は
-    `external-dependency-path` で拒否する。内部依存（同一 package）は内部契約なので
+    外部依存への参照はすべて `external-dependency-path` で拒否する。内部依存（同一 package）は内部契約なので
     形は縛らないが、`.skills.<名前>` だけは解決結果に実在する名前に限る。
     綴り違いの skill 名を静かに通すと、実行時まで誰も気付けない。
     解決結果が手元に無い（skills が None）ときは、名前の存否を判定しない。"""
@@ -286,16 +281,15 @@ def harness_metadata(data: object) -> dict:
 def owning_bundle(plugin_root: Path, runtime: str) -> tuple[Path, dict]:
     """所属package（bundle）を返す。
 
-    playbook / 内部skill の root から上へ辿り、metadata.harness に playbooks か
-    internalPlugins を持つ最初の manifest を採る。playbook 自身の component manifest は
-    これらを持たないので正しく飛ばされる。"""
+    公開入口 / 内部skill の root から上へ辿り、metadata.harness.marketplace を宣言する
+    最初の manifest を採る。package root にだけ manifest がある（plugin-package-contract.md）。"""
     for ancestor in (plugin_root, *plugin_root.parents):
         candidate = manifest_path(ancestor, runtime)
         if not candidate.is_file() or candidate.is_symlink():
             continue
         data = load_json(candidate, "dependency-invalid")
         harness = harness_metadata(data)
-        if isinstance(harness.get("playbooks"), dict) or isinstance(harness.get("internalPlugins"), dict):
+        if isinstance(harness.get("marketplace"), str) and harness["marketplace"]:
             return ancestor.resolve(strict=True), data
     fail("dependency-invalid", reason="owning-bundle-unresolved", plugin_root=str(plugin_root))
 
@@ -374,10 +368,7 @@ def validate_implements(root: Path, data: object, plugin: str, source_kind: str)
             fail("implements-entry-missing", plugin=plugin, source_kind=source_kind,
                  playbook=str(name), reason="undeclared-playbook")
         entry_root = resolved_descendant(root, playbooks[name], plugin, source_kind)
-        entry_files = (("playbook.yml", "SKILL.md")
-                       if item["id"] in DIRECT_INVOCATION_CONTRACTS
-                       else ENTRY_FILES_BY_CONTRACT[contract_version])
-        for relative in entry_files:
+        for relative in ENTRY_FILES_BY_CONTRACT[contract_version]:
             member = safe_path(entry_root, relative, exists=False)
             if not member.is_file() or member.is_symlink():
                 fail("implements-entry-missing", plugin=plugin, source_kind=source_kind,
@@ -400,7 +391,7 @@ def validate_implements(root: Path, data: object, plugin: str, source_kind: str)
 
 def contract_entry_paths(package_root: Path, data: object, entry: dict,
                          plugin: str, source_kind: str) -> tuple[Path, Path, str]:
-    """契約が選んだ入口を返す。entryRoot は使わない（二重管理をやめる）。
+    """契約が選んだ入口を返す。
 
     外部依存の root は implements[] のうち契約IDが一致する要素の playbook が
     bundle の playbooks map で指す directory である。"""
@@ -525,6 +516,42 @@ def append_lock(path: Path, contract: str, entry: dict) -> None:
         handle.write("\n")
 
 
+def internal_candidate(bundle_root: Path, bundle: dict, runtime: str, plugin: str, root: Path,
+                       source_kind: str) -> dict[str, str]:
+    """内部 skill（internal/<name>/、nested manifest 無し）の候補。identity と契約版は所属 package の manifest から取る。"""
+    canonical = canonical_input_root(root, "internal-root")
+    if not contained(bundle_root, canonical):
+        fail("dependency-invalid", plugin=plugin, source_kind=source_kind, reason="path-escape")
+    harness = harness_metadata(bundle)
+    contract = harness.get("contractVersion", 1)
+    if type(contract) is not int or contract not in ENTRY_FILES_BY_CONTRACT:
+        fail("dependency-incompatible", reason="contract-version", version=str(contract))
+    version = bundle.get("version")
+    if not isinstance(version, str) or semver_key(version) is None:
+        fail("dependency-invalid", plugin=plugin, source_kind=source_kind, reason="manifest-version-invalid")
+    skill = safe_path(canonical, "SKILL.md")
+    if not skill.is_file() or skill.is_symlink():
+        fail("dependency-invalid", plugin=plugin, source_kind=source_kind, reason="skill-entry-missing", path=str(skill))
+    name = skill_name(skill)
+    if name != plugin:
+        fail("dependency-invalid", plugin=plugin, source_kind=source_kind, reason="manifest-identity-mismatch")
+    return {
+        "contract_version": contract,
+        "content_hash": content_hash(canonical),
+        "skills": {name: str(skill)},
+        "prerelease_policy": "explicit-opt-in",
+        "plugin": plugin,
+        "version": version,
+        "runtime": runtime,
+        "source_kind": source_kind,
+        "root": str(canonical),
+        "package_root": str(bundle_root),
+        "manifest": str(manifest_path(bundle_root, runtime)),
+        "marketplace_declared": harness.get("marketplace"),
+        "implements": [],
+    }
+
+
 def validate_candidate(
     root: Path,
     runtime: str,
@@ -565,18 +592,6 @@ def validate_candidate(
     if not isinstance(harness, dict):
         fail("dependency-invalid", plugin=plugin, source_kind=source_kind, reason="manifest-harness-metadata-invalid")
     entry_root = canonical
-    entry_relative = harness.get("entryRoot")
-    if entry_relative is not None:
-        if (
-            not isinstance(entry_relative, str)
-            or not entry_relative.startswith("./")
-            or Path(entry_relative).is_absolute()
-            or ".." in Path(entry_relative).parts
-        ):
-            fail("dependency-invalid", plugin=plugin, source_kind=source_kind, reason="entry-root-invalid")
-        entry_root = resolved_descendant(canonical, entry_relative, plugin, source_kind)
-        if not contained(canonical, entry_root):
-            fail("dependency-invalid", plugin=plugin, source_kind=source_kind, reason="entry-root-invalid")
     contract = harness.get("contractVersion", 1)
     if type(contract) is not int or contract not in ENTRY_FILES_BY_CONTRACT:
         fail("dependency-incompatible", reason="contract-version", version=str(contract))
@@ -701,30 +716,52 @@ def iter_strings(value: object):
             yield from iter_strings(item)
 
 
-def lookup(data: object, dotted: str):
-    """${.a.b} 形のプロパティ参照を自分の playbook.yml から引く。解けなければ None。"""
+INPUT_RESOLVED = "resolved"
+INPUT_UNRESOLVED = "unresolved"
+INPUT_OUT_OF_SCOPE = "out-of-scope"
+
+
+def lookup(data: object, dotted: str) -> tuple[str, object]:
+    """${.a.b} の静的scalarだけを引き、未解決と対象外の型を区別する。"""
     current = data
     for part in dotted.strip().lstrip(".").split("."):
         part = part.strip().strip("\"'[]")
         if not part or not isinstance(current, dict) or part not in current:
-            return None
+            return INPUT_UNRESOLVED, None
         current = current[part]
-    return current if isinstance(current, (str, int, float)) else None
+    if type(current) in {str, int, float, bool}:
+        return INPUT_RESOLVED, current
+    return INPUT_OUT_OF_SCOPE, current
 
 
-def resolve_step_input(config: dict, step: dict, key: str):
-    """steps[].input の値を解決する。静的リテラルか、自分の playbook.yml の
-    プロパティ参照 ${.<path>} だけを解決し、それ以外は None（＝静的には検査しない）。"""
+def classify_step_input(config: dict, step: dict, key: str) -> tuple[str, object]:
+    """steps[].input の静的scalar表示を分類する。
+
+    元の input は完全なprovider入力として常に保持する。この補助解決は再帰的な
+    object/list resolverではなく、文字列literalと静的scalar propertyだけが対象である。
+    """
     block = step.get("input")
     if not isinstance(block, dict) or key not in block:
-        return None
+        return INPUT_UNRESOLVED, None
     raw = block[key]
     if isinstance(raw, str):
         matched = PROPERTY_REFERENCE.fullmatch(raw)
         if matched:
             return lookup(config.get("playbook", {}), matched.group(1))
-        return raw
-    return None
+        # `${output_directory}` のような実行時値を静的literalとして扱うと、
+        # input_resolved / explainが「解決済み」と誤表示する。自分のplaybook
+        # propertyではないplaceholderを含む値は、実行担当がneedsから組み立てる動的値である。
+        placeholder_start = raw.find("${")
+        if placeholder_start >= 0 and raw.find("}", placeholder_start + 2) >= 0:
+            return INPUT_UNRESOLVED, None
+        return INPUT_RESOLVED, raw
+    return INPUT_OUT_OF_SCOPE, raw
+
+
+def resolve_step_input(config: dict, step: dict, key: str):
+    """能力検査用に、静的scalarだけを返す。対象外と未解決はいずれも検査しない。"""
+    status, value = classify_step_input(config, step, key)
+    return value if status == INPUT_RESOLVED else None
 
 
 def contract_entry(dep: dict) -> dict | None:
@@ -809,9 +846,7 @@ def check_steps(config: dict, selected: str | None = None) -> None:
             if step["skill"] in available and available[step["skill"]][1] in external:
                 fail("external-dependency-skill", step=step["id"],
                      skill=step["skill"], plugin=available[step["skill"]][1])
-            if active and step["skill"] not in available:
-                print("[error] steps が指すスキルが requires のプラグインに無い: " + step["skill"], file=sys.stderr)
-                raise SystemExit(2)
+            # 同 package の公開入口・内部 skill は requires に載らない。その実在は root validator が検査する。
         if "script" in step:
             owner = step.get("plugin")
             if owner:
@@ -833,9 +868,6 @@ def check_steps(config: dict, selected: str | None = None) -> None:
                 dep = deps[name]
                 base = Path(dep["root"])
                 safe_path(base, "playbook.yml")
-                if dep.get("contract") not in DIRECT_INVOCATION_CONTRACTS:
-                    safe_path(base, "scripts/resolve.sh")
-                    safe_path(base, "scripts/prepare.sh")
                 if name in external:
                     entry = contract_entry(dep)
                     if entry is None:
@@ -887,7 +919,7 @@ def repository_candidate(plugin_root: Path, marketplace: str, runtime: str, plug
                 relative = internal.get(plugin) if isinstance(internal, dict) else None
                 if isinstance(relative, str):
                     candidate = resolved_descendant(ancestor, relative, plugin, "repository")
-                    return validate_candidate(candidate, runtime, plugin, "repository", ancestor)
+                    return internal_candidate(ancestor.resolve(strict=True), bundle, runtime, plugin, candidate, "repository")
         manifest = ancestor / rel_market
         if not manifest.is_file():
             continue
@@ -916,6 +948,8 @@ def repository_candidate(plugin_root: Path, marketplace: str, runtime: str, plug
             relative = internal.get(plugin) if isinstance(internal, dict) else None
             if not isinstance(relative, str):
                 fail("dependency-invalid", plugin=plugin, marketplace=marketplace, source_kind="repository", reason="marketplace-entry")
+            candidate = resolved_descendant(ancestor, relative, plugin, "repository")
+            return internal_candidate(ancestor.resolve(strict=True), bundle, runtime, plugin, candidate, "repository")
         candidate = resolved_descendant(ancestor, relative, plugin, "repository")
         return validate_candidate(candidate, runtime, plugin, "repository", ancestor)
     return None
@@ -991,11 +1025,11 @@ def cache_candidate(marketplace: str, runtime: str, plugin: str, plugin_root: Pa
 
 
 def resolve_plugin_root(declared: str) -> Path:
-    script_directory = Path(__file__).resolve().parent
-    plugin_root = script_directory.parent if script_directory.name == "scripts" else script_directory
-    if declared != os.fspath(plugin_root):
-        fail("dependency-invalid", reason="plugin-root-mismatch", declared=declared)
-    return plugin_root
+    """解決の起点（公開入口または内部 skill の directory）。絶対 path で明示し、symlink を含まない。"""
+    root = Path(declared)
+    if not root.is_absolute():
+        fail("dependency-invalid", reason="plugin-root-not-absolute", declared=declared)
+    return canonical_input_root(root, "plugin-root")
 
 
 def command_create_lock(argv: list[str]) -> int:
@@ -1060,19 +1094,20 @@ def command_check_input(argv: list[str]) -> int:
 
 
 def command_resolve_inputs(config: dict) -> int:
-    """解決済み設定の `playbook:` step に input_resolved を足して書き戻す。
+    """解決済み設定の `playbook:` step に保守用 input_resolved を足して書き戻す。
 
     `input` は参照形（`${.document_type}`）のまま残す。値の出どころを追えなくなるからだ。
-    静的に解けた分だけを別キーへ併記して、解決済み YAML を読むだけで
-    実際に渡る値が分かるようにする。解けない（実行時に決まる）キーは載せない。
+    静的に解けたscalarだけを別キーへ併記する。object/list/nullなどは元の`input`に
+    型を保持し、実行時placeholderとともに載せない。`input_resolved`はproviderへ渡す
+    完全input objectではなく、依存設定を保守・説明するための限定された補助表示である。
     足すのは生成物側だけで、同梱 playbook.yml と設定の未知キー検査には触れない。"""
     for step in config.get("playbook", {}).get("steps", []):
         if "playbook" not in step or not isinstance(step.get("input"), dict):
             continue
         resolved = {}
         for key in step["input"]:
-            value = resolve_step_input(config, step, key)
-            if value is not None:
+            resolution, value = classify_step_input(config, step, key)
+            if resolution == INPUT_RESOLVED:
                 resolved[key] = value
         if resolved:
             step["input_resolved"] = resolved
@@ -1085,15 +1120,21 @@ def command_explain(config: dict) -> int:
     playbook = config.get("playbook", {})
     out = sys.stdout
     print("# playbook: " + str(playbook.get("name")), file=out)
+    print("# input_resolved: 保守用の静的scalar表示（providerへ渡す完全inputではない）", file=out)
     for step in playbook.get("steps", []):
         kind = step.get("skill") or step.get("script") or ("playbook:" + str(step.get("playbook")))
         print(f"  {step.get('id')}: {kind}  — {step.get('purpose')}", file=out)
         block = step.get("input")
         if isinstance(block, dict):
             for key in sorted(block):
-                value = resolve_step_input(config, step, key)
+                resolution, value = classify_step_input(config, step, key)
                 raw = block[key]
-                shown = "(動的)" if value is None else str(value)
+                if resolution == INPUT_UNRESOLVED:
+                    shown = "(未解決・実行時)"
+                elif resolution == INPUT_OUT_OF_SCOPE:
+                    shown = "(解決対象外・inputに保持)"
+                else:
+                    shown = str(value)
                 note = f"  ({raw})" if isinstance(raw, str) and raw != shown else ""
                 print(f"      input.{key} = {shown}{note}", file=out)
     deps = config.get("deps", {})
