@@ -3,11 +3,11 @@
   "owner": {
     "name": "NaoyaNakamori"
   },
-  "description": "業務知識・コアドメインの正本から、戦術DDDのドメインモデル資料を作るPlaybookパッケージを配布するmarketplace",
+  "description": "業務知識・コアドメインの正本から、戦術DDDのドメインモデル資料を作るpackageを配布するmarketplace",
   "plugins": [
     {
       "name": "domain-modeling",
-      "source": "./plugins",
+      "source": "./plugins/domain-modeling",
       "description": "domain-rule正本の業務概念を値オブジェクト・エンティティ・集約・ドメインイベントへ割り当て、契約つきのドメインモデル資料を1本保存する",
       "version": "1.0.0"
     }

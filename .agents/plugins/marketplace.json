@@ -8,7 +8,7 @@
       "name": "domain-modeling",
       "source": {
         "source": "local",
-        "path": "./plugins"
+        "path": "./plugins/domain-modeling"
       },
       "policy": {
         "installation": "AVAILABLE",

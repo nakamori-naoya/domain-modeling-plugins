@@ -1,0 +1,23 @@
+{
+  "name": "domain-modeling",
+  "version": "1.0.0",
+  "description": "domain-rule正本の業務概念を値オブジェクト・エンティティ・集約・ドメインイベントへ割り当て、契約つきのドメインモデル資料を1本保存する",
+  "author": {
+    "name": "NaoyaNakamori"
+  },
+  "skills": [
+    "./skills/model-domain"
+  ],
+  "metadata": {
+    "harness": {
+      "marketplace": "domain-modeling",
+      "contractVersion": 1
+    }
+  },
+  "interface": {
+    "displayName": "Playbook Package",
+    "capabilities": [
+      "Skills"
+    ]
+  }
+}
