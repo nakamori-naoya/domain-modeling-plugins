@@ -1,7 +1,7 @@
 {
   "name": "domain-modeling",
   "version": "3.1.0",
-  "description": "domain-rule正本の業務概念を値オブジェクト・エンティティ・集約・ドメインイベントへ割り当て、契約つきのドメインモデル資料を1本保存する",
+  "description": "domain-ruleの正式な定義の業務概念を値オブジェクト・エンティティ・集約・ドメインイベントへ割り当て、契約つきのドメインモデル資料を1本保存する",
   "author": {
     "name": "NaoyaNakamori"
   },

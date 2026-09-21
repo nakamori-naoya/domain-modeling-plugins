@@ -12,7 +12,7 @@ failed=0
 PACKAGE="$ROOT/plugins/domain-modeling"
 ENTRY="$PACKAGE/skills/model-domain"
 
-# 保守toolの正本は兄弟checkout harness-tools だけ。複製を持たず、無ければ止まる（fixtureで代用しない）。
+# 保守toolの参照元は兄弟checkout harness-tools だけ。複製を持たず、無ければ止まる（fixtureで代用しない）。
 TOOLS="$ROOT/../harness-tools/tools"
 [ -d "$TOOLS" ] || { echo "[error] 兄弟 checkout harness-tools が無い: $TOOLS" >&2; exit 2; }
 python3 "$TOOLS/validate-plugin-repository.py" "$ROOT" || failed=1
