@@ -5,23 +5,23 @@
 
   - 節と順序が契約と一致し、どの節も空でない
   - 実装の節（テーブル定義・API など）が混入しない
-  - 要素一覧の全要素が、正本から機械抽出した明示索引の語だけで名付けられている
+  - 要素一覧の全要素が、正式な定義から機械抽出した明示索引の語だけで名付けられている
   - モデル図が集約ごとに分かれ、各集約に責務・境界の箇条書きと classDiagram があり、全要素がどこかの集約の図に現れ、
     メソッドは公開コマンド（括弧つき）だけで、フィールドが無い。集約が2つ以上なら「集約どうしの関係」の図がある
   - 要素一覧の全要素（ドメインイベントを除く）に詳細があり、必須項目（####）と操作ごとの契約（#### 操作:）が埋まっている
   - 詳細にあって一覧に無い要素が無い
   - 集約が2つ以上なら「集約どうしの協働」の表があり、手段が契約の値（識別子で参照／値として渡す／ドメインイベント／呼び手が両方を操作）に収まる
-  - 正本の全BDDが対応表か「対応しないBDD」に現れ、全要素が対応表か「対応のない要素・操作」に現れる
-  - 「正本へ提案する概念」に契約の4列の表があるか「なし」と書かれ、提案した語は要素一覧の要素名・正本の語に現れず、
-    提案が引くBDD番号は正本にあり、足す先の節は正本の契約の節名である
+  - 正式な定義の全BDDが対応表か「対応しないBDD」に現れ、全要素が対応表か「対応のない要素・操作」に現れる
+  - 「業務知識へ提案する概念」に契約の4列の表があるか「なし」と書かれ、提案した語は要素一覧の要素名・業務知識の語に現れず、
+    提案が引くBDD番号は正式な定義にあり、足す先の節は正式な定義の契約の節名である
   - 未決の節が空でない（「なし」を含む）
 
-  verify.py --playbook <同じdirectoryのplaybook.yml> --source <domain-rule正本の絶対path>  < <候補モデル本文（Markdown）>
+  verify.py --playbook <同じdirectoryのplaybook.yml> --source <domain-ruleの正式な定義の絶対path>  < <候補モデル本文（Markdown）>
 
-入力は標準入力の候補本文、引数の playbook.yml、正本のpathだけである。索引は同じdirectoryの source.py の build_index で
-正本から毎回導き、索引fileも候補fileも受け取らない。
+入力は標準入力の候補本文、引数の playbook.yml、正式な定義のpathだけである。索引は同じdirectoryの source.py の build_index で
+正式な定義から毎回導き、索引fileも候補fileも受け取らない。
 
-exit 0 = 通った（stdoutに verified と warnings） / 2 = 標準入力が空、正本が契約の節を持たない、または述語が成り立たない（診断は標準エラー）。
+exit 0 = 通った（stdoutに verified と warnings） / 2 = 標準入力が空、正式な定義が契約の節を持たない、または述語が成り立たない（診断は標準エラー）。
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from source import build_index  # noqa: E402  同じdirectoryの索引器。正本から検査の正解を導く
+from source import build_index  # noqa: E402  同じdirectoryの索引器。正式な定義から検査の正解を導く
 
 HEADING = re.compile(r"^(#{1,6})[ ]+(.+?)[ ]*$")
 BDD_ID = re.compile(r"BDD-\d{3,}")
@@ -228,58 +228,59 @@ def main() -> int:
         if empty:
             raise ValueError("空の節がある: " + ", ".join(empty))
 
-        # 正本へ提案する概念（要素一覧より先に読み、提案した語が要素に混ざっていないかを要素一覧の走査で見る）
+        # 業務知識へ提案する概念（要素一覧より先に読み、提案した語が要素に混ざっていないかを要素一覧の走査で見る）
         # Deterministic validation declaration:
-        # source=contract.proposal_columns, contract.source_sections (正本の見出し), and the BDD ids indexed from the domain-rule path;
-        # input=the 「正本へ提案する概念」 section (table rows or the literal 「なし」) and the 要素一覧 table;
+        # source=contract.proposal_columns, contract.source_sections (正式な定義の見出し), and the BDD ids indexed from the domain-rule path;
+        # input=the 「業務知識へ提案する概念」 section (table rows or the literal 「なし」) and the 要素一覧 table;
         # normalization=strip markup, split 「足す先」 and 「要素の語」 cells on 、,／/, BDD regex extraction;
         # predicate=(a) section has the 4-column table with no blank cell, or is 「なし」; (b) no proposed concept equals an
-        # element name or a 正本の語 cell of 要素一覧; (c) every BDD id cited by a proposal exists in the index; (d) every 足す先
+        # element name or a 業務知識の語 cell of 要素一覧; (c) every BDD id cited by a proposal exists in the index; (d) every 足す先
         # is a source section heading; diagnostic=the proposal and the offending word/id/section; positive=会議室 proposed and
         # absent from 要素一覧; negative=会議室 proposed and also listed as an element; boundary=「なし」 passes, a proposal whose
         # name is already in the index passes with a neutral warning. Whether the proposal is necessary is semantic.
         proposal_columns = list(contract["proposal_columns"])
         source_headings = set(contract["source_sections"].values())
-        proposal_lines = content["正本へ提案する概念"]
-        proposal_tables = [table for table in tables(proposal_lines) if table["header"][:len(proposal_columns)] == proposal_columns]
+        proposal_lines = content["業務知識へ提案する概念"]
+        proposal_tables = [table for table in tables(proposal_lines) if table["header"] == proposal_columns]
         proposals: dict[str, dict] = {}
         if proposal_tables and proposal_tables[0]["rows"]:
             for row in proposal_tables[0]["rows"]:
-                if len(row) < len(proposal_columns) or not all(row[:len(proposal_columns)]):
-                    raise ValueError("正本へ提案する概念の行に空欄がある: " + " | ".join(row))
+                if len(row) != len(proposal_columns) or not all(row):
+                    raise ValueError("業務知識へ提案する概念の行に空欄がある: " + " | ".join(row))
                 concept = row[0]
                 if concept in proposals:
-                    raise ValueError("正本へ提案する概念に同じ概念が2度ある: " + concept)
+                    raise ValueError("業務知識へ提案する概念に同じ概念が2度ある: " + concept)
                 unknown_ids = sorted(bdd for bdd in BDD_ID.findall(row[2]) if bdd not in set(index["bdd"]))
                 if unknown_ids:
-                    raise ValueError(f"正本へ提案する概念「{concept}」が引くBDD番号が正本に無い: " + ", ".join(unknown_ids))
+                    raise ValueError(f"業務知識へ提案する概念「{concept}」が引くBDD番号が正式な定義に無い: " + ", ".join(unknown_ids))
                 targets = names_in(row[3])
                 bad_targets = [target for target in targets if target not in source_headings]
                 if not targets or bad_targets:
-                    raise ValueError(f"正本へ提案する概念「{concept}」の足す先が正本の節名ではない: " + ", ".join(bad_targets or [row[3]])
+                    raise ValueError(f"業務知識へ提案する概念「{concept}」の足す先が正式な定義の節名ではない: " + ", ".join(bad_targets or [row[3]])
                                      + "（許す値: " + "／".join(contract["source_sections"].values()) + "）")
                 if concept in vocabulary:
-                    warnings.append(f"正本へ提案する概念「{concept}」は正本の索引に既にある。提案が節の追加なのか、要素にすべき語なのかを同じagentが読み返す")
+                    warnings.append(f"業務知識へ提案する概念「{concept}」は正式な定義の索引に既にある。提案が節の追加なのか、要素にすべき語なのかを同じagentが読み返す")
                 proposals[concept] = {"targets": targets}
         else:
             literal_none = [line.strip() for line in proposal_lines if line.strip() and not line.strip().startswith("<!--")]
             if literal_none != ["なし"]:
-                raise ValueError("正本へ提案する概念に「" + " | ".join(proposal_columns) + "」の表が無い。0件なら「なし」とだけ書く")
+                raise ValueError("業務知識へ提案する概念に「" + " | ".join(proposal_columns) + "」の表が無い。0件なら「なし」とだけ書く")
 
         # 要素一覧
-        listing = [table for table in tables(content["要素一覧"]) if table["header"][:2] == ["要素", "種別"]]
+        element_columns = list(contract["element_columns"])
+        listing = [table for table in tables(content["要素一覧"]) if table["header"] == element_columns]
         if not listing or not listing[0]["rows"]:
-            raise ValueError("要素一覧に「要素 | 種別 | 正本の語 | 目的」の表が無いか空である")
+            raise ValueError("要素一覧に「" + " | ".join(element_columns) + "」の表が無いか空である")
         elements: dict[str, dict] = {}
         for row in listing[0]["rows"]:
-            if len(row) < 4 or not all(row[:4]):
+            if len(row) != len(element_columns) or not all(row):
                 raise ValueError("要素一覧の行に空欄がある: " + " | ".join(row))
             name, kind, term, purpose = row[0], row[1], row[2], row[3]
             if name in elements:
                 raise ValueError("要素一覧に同じ要素が2度ある: " + name)
             mixed_proposal = sorted({word for word in [name] + names_in(term) if word in proposals})
             if mixed_proposal:
-                raise ValueError(f"正本へ提案する概念の語が要素一覧に混ざっている: {', '.join(mixed_proposal)}（要素「{name}」）。提案した語は要素にせず、正本へ足してから要素にする")
+                raise ValueError(f"業務知識へ提案する概念の語が要素一覧に混ざっている: {', '.join(mixed_proposal)}（要素「{name}」）。提案した語は要素にせず、正式な定義へ足してから要素にする")
             if not any(kind.startswith(allowed) for allowed in kinds):
                 raise ValueError(f"要素「{name}」の種別が契約の外: {kind}")
             if any(kind.startswith(ex) for ex in exceptional):
@@ -295,7 +296,7 @@ def main() -> int:
                 if word not in vocabulary:
                     raise ValueError(
                         f"要素「{name}」の語「{word}」が索引に無い。"
-                        "要素名と正本の語は明示索引から選ぶ"
+                        "要素名と業務知識の語は明示索引から選ぶ"
                     )
             elements[name] = {"kind": kind, "term": term}
 
@@ -417,20 +418,20 @@ def main() -> int:
         declared_unmapped = set(BDD_ID.findall(unmapped_line))
         missing_bdd = [bdd for bdd in index["bdd"] if bdd not in covered_bdd and bdd not in declared_unmapped]
         if missing_bdd:
-            raise ValueError("正本のBDDが対応表にも「対応しないBDD」にも無い: " + ", ".join(missing_bdd))
+            raise ValueError("正式な定義のBDDが対応表にも「対応しないBDD」にも無い: " + ", ".join(missing_bdd))
         unknown_bdd = sorted(bdd for bdd in covered_bdd if bdd not in set(index["bdd"]))
         if unknown_bdd:
-            raise ValueError("正本に無いBDD番号が対応表にある: " + ", ".join(unknown_bdd))
+            raise ValueError("正式な定義に無いBDD番号が対応表にある: " + ", ".join(unknown_bdd))
         declared_unused = names_in(unused_line.split(":", 1)[1])
         unused = [name for name in needs_detail if name not in covered_elements and name not in declared_unused]
         if unused:
             raise ValueError("対応表にも「対応のない要素・操作」にも記載が無い要素: " + ", ".join(unused))
         if declared_unmapped:
             warnings.append("対応しないと明示されたBDDがある: " + ", ".join(sorted(declared_unmapped))
-                            + "。必要性と対応方針は同じagentが正本と候補を読んで判断する")
+                            + "。必要性と対応方針は同じagentが正式な定義と候補を読んで判断する")
         if declared_unused and declared_unused != ["なし"]:
             warnings.append("対応がないと明示された要素・操作がある: " + ", ".join(declared_unused)
-                            + "。必要性と対応方針は同じagentが正本と候補を読んで判断する")
+                            + "。必要性と対応方針は同じagentが正式な定義と候補を読んで判断する")
 
         # 未決
         if not nonempty(content["未決"]):

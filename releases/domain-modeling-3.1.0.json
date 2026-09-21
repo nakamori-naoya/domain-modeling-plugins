@@ -3,9 +3,9 @@
   "plugin": "domain-modeling",
   "version": "3.1.0",
   "created_at": "2026-09-16T12:25:24.034729+00:00",
-  "notes": "資料templateをwrite-docへ一元化: model-domainのreferences/deliverable.md（ドメインモデル資料の型を定めるfile。write-docのdomain-model templateと同型）を撤去し、本文をkind:textで作りdocument_type: domain-modelで保存するだけにした。write-docへ渡すreferencesは入力のreferencesだけ。保守toolの正本を兄弟checkout harness-toolsへ集約し、scripts/の複製とshared/の同期機構を廃止（repository tooling。配布物には影響しない）。",
+  "notes": "資料templateをwrite-docへ一元化: model-domainのreferences/deliverable.md（ドメインモデル資料の型を定めるfile。write-docのdomain-model templateと同型）を撤去し、本文をkind:textで作りdocument_type: domain-modelで保存するだけにした。write-docへ渡すreferencesは入力のreferencesだけ。保守toolの正式な定義を兄弟checkout harness-toolsへ集約し、scripts/の複製とshared/の同期機構を廃止（repository tooling。配布物には影響しない）。",
   "breaking": "なし。公開入口model-domainの入力・出力・工程順・verify.pyの述語は不変。",
-  "migration": "marketplace を update し plugin を再 install する。write-doc の domain-model template が資料の型の唯一の正本になるので、型の記法はそちらを読む。",
+  "migration": "marketplace を update し plugin を再 install する。write-doc の domain-model template が資料の型の唯一の正式な定義になるので、型の記法はそちらを読む。",
   "checks": {
     "codex": {
       "status": "manifest-and-contract-tests-passed",

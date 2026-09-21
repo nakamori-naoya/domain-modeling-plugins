@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""domain-rule正本から、割り当ての候補と検査の正解になる索引を機械的に抜き出し、標準出力へJSONで返す。
+"""domain-ruleの正式な定義から、割り当ての候補と検査の正解になる索引を機械的に抜き出し、標準出力へJSONで返す。
 
-正本の見出し名は同じdirectoryの playbook.yml の contract.source_sections が持つ。ここは見出しの名前を知らず、
+正式な定義の見出し名は同じdirectoryの playbook.yml の contract.source_sections が持つ。ここは見出しの名前を知らず、
 「その見出しの下にある表の第1列・小見出し・箇条書き・BDD番号」を拾うだけである。
 意味の判断はしない。索引に無い語を要素にできない、という検査の材料を作る。
-索引はfileへ書かない。verify.py は同じ build_index を呼び、正本のpathから毎回同じ索引を導く。
+索引はfileへ書かない。verify.py は同じ build_index を呼び、正式な定義のpathから毎回同じ索引を導く。
 
-  source.py --playbook <同じdirectoryのplaybook.yml> --source <domain-rule正本の絶対path>
+  source.py --playbook <同じdirectoryのplaybook.yml> --source <domain-ruleの正式な定義の絶対path>
 
-exit 0 = 索引を標準出力へ返した（vocabulary / bdd / counts を含むJSON） / 2 = 正本が契約の節を持たない、または読めない。
+exit 0 = 索引を標準出力へ返した（vocabulary / bdd / counts を含むJSON） / 2 = 正式な定義が契約の節を持たない、または読めない。
 """
 
 from __future__ import annotations
@@ -154,15 +154,15 @@ def collect(nodes: list[dict], sections: dict[str, str]) -> dict:
 
 
 def build_index(playbook_path: Path, source_raw: str) -> dict:
-    """playbook.yml の contract.source_sections と正本のpathから索引を組み立てる。正本が契約の節を持たなければ ValueError。"""
+    """playbook.yml の contract.source_sections と正式な定義のpathから索引を組み立てる。正式な定義が契約の節を持たなければ ValueError。"""
     playbook = load_yaml(playbook_path)
     sections = playbook["contract"]["source_sections"]
-    source = regular_file(source_raw, "正本")
+    source = regular_file(source_raw, "正式な定義")
     nodes = outline(source.read_text(encoding="utf-8"))
     index = collect(nodes, sections)
     missing = [sections[role] for role in REQUIRED_ROLES if not index.get(role)]
     if missing:
-        raise ValueError("正本に契約の節が無いか空である: " + ", ".join(missing))
+        raise ValueError("正式な定義に契約の節が無いか空である: " + ", ".join(missing))
     states = index.get("states") or {"holders": [], "names": [], "triggers": []}
     vocabulary: list[str] = []
     for word in (index["terms"] + index["events"] + index["concepts"]

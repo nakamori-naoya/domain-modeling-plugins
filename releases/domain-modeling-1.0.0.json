@@ -3,7 +3,7 @@
   "plugin": "domain-modeling",
   "version": "1.0.0",
   "created_at": "2026-09-14T01:35:08.108493+00:00",
-  "notes": "初版。domain-rule 正本を1本受け取り、業務概念を値オブジェクト・エンティティ・集約・ドメインイベントへ割り当て、各要素の目的・何でないか・不変条件・操作の契約（事前条件・事後条件・拒む理由）と、集約ごとの公開コマンドだけの classDiagram、集約どうしの協働を書いた domain-model 資料を1本保存する公開 playbook model-domain。grill を最初の工程に置き、正本に無い語・データの持ち方の語・BDD に対応しない要素を機械検査で止める。",
+  "notes": "初版。domain-ruleの正式な定義を1本受け取り、業務概念を値オブジェクト・エンティティ・集約・ドメインイベントへ割り当て、各要素の目的・何でないか・不変条件・操作の契約（事前条件・事後条件・拒む理由）と、集約ごとの公開コマンドだけの classDiagram、集約どうしの協働を書いた domain-model 資料を1本保存する公開 playbook model-domain。grill を最初の工程に置き、正式な定義に無い語・データの持ち方の語・BDD に対応しない要素を機械検査で止める。",
   "breaking": "無し（初版）。",
   "migration": "無し。grill@grill と write-doc@write-doc（6.0.0 以上。domain-model 型が要る）を先に導入する。",
   "checks": {
@@ -18,7 +18,7 @@
       "evidence": "bash scripts/validate.sh: exit 0（Validation: passed）"
     },
     "real-distribution": "兄弟checkoutの実配布物（grill / write-doc / product-planning runtime-source）に対して解決した",
-    "runtime-sync": "scripts/sync-runtime.py --check --source <正本>: version 2.5.1、changed 空",
+    "runtime-sync": "scripts/sync-runtime.py --check --source <正式な定義>: version 2.5.1、changed 空",
     "post-version-validation": "bash scripts/validate.sh（版更新後）: exit 0（Validation: passed）"
   },
   "files": [

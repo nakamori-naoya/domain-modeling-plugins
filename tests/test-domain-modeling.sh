@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # model-domain が所有する script（source.py / verify.py）を、典型例・負例・境界例で実行する。
-# 正本: playbook.yml の contract と domain-rule 正本。入力: 正本path（source.py）、正本path＋標準入力の候補本文（verify.py）。
+# 基準資料: playbook.yml の contract と domain-ruleの正式な定義。入力: 正式な定義のpath（source.py）、正式な定義のpath＋標準入力の候補本文（verify.py）。
 # 正規化: 見出し・表・箇条書きの機械抽出。合格述語: verify.py 冒頭の一覧。診断: 標準エラー。
-# 正例: fixtures/domain-model.md（正本へ提案する概念を2件持つ）。反例: 索引外の語、空欄、節の順序、未宣言BDD、提案した語が要素一覧に混ざる、提案の表の欠落・不正なBDD番号・不正な足す先。境界例: 空stdin、正本path欠落、旧形の --candidate 引数、提案0件の「なし」、索引に既にある語の提案。
+# 正例: fixtures/domain-model.md（業務知識へ提案する概念を2件持つ）。反例: 索引外の語、空欄、節の順序、未宣言BDD、提案した語が要素一覧に混ざる、提案の表の欠落・不正なBDD番号・不正な足す先。境界例: 空stdin、正式な定義のpath欠落、旧形の --candidate 引数、提案0件の「なし」、索引に既にある語の提案。
 # 検査するのは述語であって、モデルの良し悪しではない。
 set -uo pipefail
 
@@ -11,6 +11,7 @@ TMP=$(mktemp -d "${TMPDIR:-/tmp}/domain-modeling-test.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
 PB="$ROOT/plugins/domain-modeling/skills/model-domain"
 FIX="$ROOT/tests/fixtures"
+WRITE_DOC_TEMPLATE="$ROOT/../write-doc-plugins/plugins/write-doc/skills/write-doc/assets/templates/domain-model.md"
 PASS=0
 FAIL=0
 
@@ -34,22 +35,31 @@ expect_verify_stderr() {
 
 cp "$FIX/domain-rule.md" "$TMP/order.md"
 
-# ── 正本の索引（source.py） ───────────────────────────────────────────────
+# ── 正式な定義の索引（source.py） ───────────────────────────────────────────────
 python3 "$PB/scripts/source.py" --playbook "$PB/playbook.yml" --source "$TMP/order.md" > "$TMP/index.json" 2>"$TMP/err" && ok "source.py prints the index to stdout" || ng "source.py: $(head -3 "$TMP/err")"
 jq -e '(.terms|index("利用枠")) and (.concepts|index("予約")) and (.events|length)>0 and (.invariants|length)>0 and (.bdd|index("BDD-001")) and (.vocabulary|index("仮押さえ予約")) and (.states.holders|index("予約")) and (.counts.vocabulary>0)' "$TMP/index.json" >/dev/null && ok "index picks terms, concepts, events, invariants, states, BDD ids" || ng "index content"
 [ -z "$(find "$TMP" -name 'source-index*' -o -name '*.index' 2>/dev/null)" ] && ok "index is not written to a file" || ng "index file was written"
-# 負例: 契約の節（常に守られること）が無い正本
+# 負例: 契約の節（常に守られること）が無い正式な定義
 grep -v '^# 常に守られること' "$TMP/order.md" | sed '/^| # | 常に守られること/,/^$/d' > "$TMP/order-noinv.md"
-expect_stderr "正本に契約の節が無いか空である" python3 "$PB/scripts/source.py" --playbook "$PB/playbook.yml" --source "$TMP/order-noinv.md"
-# 境界例: 旧形の --output、正本path欠落、正本が無い
+expect_stderr "正式な定義に契約の節が無いか空である" python3 "$PB/scripts/source.py" --playbook "$PB/playbook.yml" --source "$TMP/order-noinv.md"
+# 境界例: 旧形の --output、正式な定義のpath欠落、正式な定義が無い
 expect_fail python3 "$PB/scripts/source.py" --playbook "$PB/playbook.yml" --source "$TMP/order.md" --output "$TMP/index-old.json"
 expect_fail python3 "$PB/scripts/source.py" --playbook "$PB/playbook.yml"
 expect_stderr "通常ファイルではない" python3 "$PB/scripts/source.py" --playbook "$PB/playbook.yml" --source "$TMP/missing.md"
 
 # ── 割り当ての検査（verify.py） ───────────────────────────────────────────
+[ -f "$WRITE_DOC_TEMPLATE" ] \
+  && rg -F '## 業務知識へ提案する概念' "$WRITE_DOC_TEMPLATE" >/dev/null \
+  && rg -F '| 要素 | 種別 | 業務知識の語 | 目的（一文） |' "$WRITE_DOC_TEMPLATE" >/dev/null \
+  && rg -F '| 概念 | なぜ要るか | 導いた業務ルール・BDD | 業務知識のどの節へ足すか |' "$WRITE_DOC_TEMPLATE" >/dev/null \
+  && ok "write-docのdomain-model templateと検査契約の節・列名が一致" \
+  || ng "write-docのdomain-model templateを検査契約の根拠として読めない"
 expect_verify_ok "$FIX/domain-model.md"
 verify "$FIX/domain-model.md" 2>/dev/null | jq -e '.verified==true and (.source_path|endswith("order.md")) and (.warnings|type=="array")' >/dev/null && ok "verify returns verified, source_path, warnings" || ng "verify output shape"
-# 境界例: 空の標準入力、正本path欠落、旧形の --candidate / --source-index 引数、正本が契約の節を持たない
+legacy_term=$(printf '\u6b63\u672c')
+sed "s/業務知識の語/${legacy_term}の語/" "$FIX/domain-model.md" > "$TMP/model-legacy-element-column.md"
+expect_verify_stderr "要素一覧に「要素 | 種別 | 業務知識の語 | 目的（一文）」の表が無いか空である" "$TMP/model-legacy-element-column.md"
+# 境界例: 空の標準入力、正式な定義のpath欠落、旧形の --candidate / --source-index 引数、正式な定義が契約の節を持たない
 : > "$TMP/empty.md"
 expect_verify_stderr "標準入力が空" "$TMP/empty.md"
 expect_fail_stdin() { local input="$1"; shift; "$@" < "$input" >/dev/null 2>&1 && { ng "$* < $(basename "$input") should fail"; return; }; ok "$* < $(basename "$input") is rejected"; }
@@ -58,43 +68,43 @@ expect_fail_stdin "$FIX/domain-model.md" python3 "$PB/scripts/verify.py" --playb
 expect_fail_stdin "$FIX/domain-model.md" python3 "$PB/scripts/verify.py" --playbook "$PB/playbook.yml" --source "$TMP/order.md" --source-index "$TMP/index.json"
 expect_fail_stdin "$FIX/domain-model.md" python3 "$PB/scripts/verify.py" --playbook "$PB/playbook.yml" --source "$TMP/order-noinv.md"
 
-# 境界例: 正本本文には現れるが、明示索引に無い「予約者」を要素名にしても拒否する。
+# 境界例: 正式な定義本文には現れるが、明示索引に無い「予約者」を要素名にしても拒否する。
 sed 's/^| 利用枠 | 値オブジェクト | 利用枠 |/| 予約者 | 値オブジェクト | 予約者 |/; s/^### 利用枠$/### 予約者/' "$FIX/domain-model.md" > "$TMP/model-prose-only.md"
 expect_verify_stderr "索引に無い" "$TMP/model-prose-only.md"
 
-# ── 正本へ提案する概念（D2）: 正例は fixture（会議室・繰上げの不成立を提案し、要素一覧には無い） ──
+# ── 業務知識へ提案する概念（D2）: 正例は fixture（会議室・繰上げの不成立を提案し、要素一覧には無い） ──
 # 負例: 提案した語（会議室）を要素一覧にも載せる → 索引外より先に「混ざっている」で拒否
 sed 's/^| 利用枠 | 値オブジェクト | 利用枠 |/| 会議室 | 値オブジェクト | 会議室 |/; s/^### 利用枠$/### 会議室/' "$FIX/domain-model.md" > "$TMP/model-proposal-mixed.md"
-expect_verify_stderr "正本へ提案する概念の語が要素一覧に混ざっている" "$TMP/model-proposal-mixed.md"
+expect_verify_stderr "業務知識へ提案する概念の語が要素一覧に混ざっている" "$TMP/model-proposal-mixed.md"
 # 負例: 提案の節に表も「なし」も無い
 python3 - "$FIX/domain-model.md" "$TMP/model-proposal-empty.md" <<'PY'
 import sys, re
 t = open(sys.argv[1], encoding="utf-8").read()
-t = re.sub(r"(## 正本へ提案する概念\n\n)(?:\|.*\n)+", r"\1提案は本文のどこかに書いた。\n", t)
+t = re.sub(r"(## 業務知識へ提案する概念\n\n)(?:\|.*\n)+", r"\1提案は本文のどこかに書いた。\n", t)
 open(sys.argv[2], "w", encoding="utf-8").write(t)
 PY
-expect_verify_stderr "正本へ提案する概念に「概念 | なぜ要るか | 導いた業務ルール・BDD | 正本のどの節へ足すか」の表が無い" "$TMP/model-proposal-empty.md"
+expect_verify_stderr "業務知識へ提案する概念に「概念 | なぜ要るか | 導いた業務ルール・BDD | 業務知識のどの節へ足すか」の表が無い" "$TMP/model-proposal-empty.md"
 # 境界例: 提案が0件なら「なし」とだけ書けば通る
 python3 - "$FIX/domain-model.md" "$TMP/model-proposal-none.md" <<'PY'
 import sys, re
 t = open(sys.argv[1], encoding="utf-8").read()
-t = re.sub(r"(## 正本へ提案する概念\n\n)(?:\|.*\n)+", r"\1なし\n", t)
+t = re.sub(r"(## 業務知識へ提案する概念\n\n)(?:\|.*\n)+", r"\1なし\n", t)
 open(sys.argv[2], "w", encoding="utf-8").write(t)
 PY
 expect_verify_ok "$TMP/model-proposal-none.md"
-# 負例: 提案が引くBDD番号が正本に無い
+# 負例: 提案が引くBDD番号が正式な定義に無い
 sed 's/業務ルール「予約待ち」の繰上げ、BDD-007/業務ルール「予約待ち」の繰上げ、BDD-099/' "$FIX/domain-model.md" > "$TMP/model-proposal-badbdd.md"
-expect_verify_stderr "引くBDD番号が正本に無い: BDD-099" "$TMP/model-proposal-badbdd.md"
-# 負例: 足す先が正本の節名ではない（実装の節）
+expect_verify_stderr "引くBDD番号が正式な定義に無い: BDD-099" "$TMP/model-proposal-badbdd.md"
+# 負例: 足す先が正式な定義の節名ではない（実装の節）
 sed 's/^\(| 繰上げの不成立 | .* | \)業務イベント、BDD |$/\1テーブル定義 |/' "$FIX/domain-model.md" > "$TMP/model-proposal-badtarget.md"
 grep -q 'テーブル定義 |$' "$TMP/model-proposal-badtarget.md" || ng "fixture edit for bad target did not apply"
-expect_verify_stderr "足す先が正本の節名ではない: テーブル定義" "$TMP/model-proposal-badtarget.md"
+expect_verify_stderr "足す先が正式な定義の節名ではない: テーブル定義" "$TMP/model-proposal-badtarget.md"
 # 境界例: 提案した語が既に索引にある（無断不利用。要素ではない）→ 通るが warning に出る
 sed 's/^| 繰上げの不成立 | /| 無断不利用 | /' "$FIX/domain-model.md" > "$TMP/model-proposal-indexed.md"
 verify "$TMP/model-proposal-indexed.md" 2>"$TMP/err" \
-  | jq -e '.warnings | any(contains("正本へ提案する概念「無断不利用」は正本の索引に既にある"))' >/dev/null && ok "indexed proposal passes with neutral warning" || ng "indexed proposal: $(head -2 "$TMP/err")"
+  | jq -e '.warnings | any(contains("業務知識へ提案する概念「無断不利用」は正式な定義の索引に既にある"))' >/dev/null && ok "indexed proposal passes with neutral warning" || ng "indexed proposal: $(head -2 "$TMP/err")"
 
-# 負例1: 正本に無い語を要素にする
+# 負例1: 正式な定義に無い語を要素にする
 sed 's/^| 利用枠 | 値オブジェクト | 利用枠 |/| 用紙ロット | 値オブジェクト | 用紙ロット |/; s/^### 利用枠$/### 用紙ロット/' "$FIX/domain-model.md" > "$TMP/model-unknown.md"
 expect_verify_stderr "索引に無い" "$TMP/model-unknown.md"
 # 負例2: 操作の契約に空欄がある
@@ -145,7 +155,7 @@ rest = [s for s in sections if not s.startswith("## 未決")]
 open(sys.argv[2], "w", encoding="utf-8").write(head + "".join(mikketsu + rest))
 PY
 expect_verify_stderr "節と順序が契約に一致しない" "$TMP/model-order.md"
-# 負例4: 正本のBDDが対応表にも「対応しないBDD」にも無い
+# 負例4: 正式な定義のBDDが対応表にも「対応しないBDD」にも無い
 grep -v '^| BDD-013 |' "$FIX/domain-model.md" > "$TMP/model-nobdd.md"
 expect_verify_stderr "BDD-013" "$TMP/model-nobdd.md"
 # 境界例: 対応しないBDDを宣言すれば通り、warning に出る
