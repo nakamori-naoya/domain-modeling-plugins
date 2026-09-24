@@ -195,7 +195,7 @@ def check(body: str, index: dict, contract: dict) -> list[str]:
                         continue
                     name = command.group(1).strip()
                     if name not in commands_in_source:
-                        errors.append(f"クラス「{label}」のコマンド「{name}」は、正式な定義の「コマンドとクエリ」でコマンドとした行いに無い")
+                        errors.append(f"クラス「{label}」のコマンド「{name}」は、正式な定義の業務の行いのコマンドに無い")
                     if name not in own_commands:
                         own_commands.append(name)
                     for argument in (arg.strip() for arg in command.group(2).split(",")):

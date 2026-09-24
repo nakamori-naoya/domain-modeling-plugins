@@ -16,12 +16,12 @@ contract:
   source_sections:
     terms: 業務用語
     events: 業務イベント
-    commands: コマンドとクエリ
+    actions: 業務の行い
     concepts: 概念
     states: 状態と、その移り変わり
     bdd: BDD
-  # 「コマンドとクエリ」表で、コマンドを示す種別の値。
-  command_kind: コマンド
+  # 「業務の行い」の下で、コマンドを並べる小見出し。その下の各見出しがコマンドの名前になる。
+  command_group: コマンド
   element_kinds: [集約ルート, エンティティ, 値オブジェクト, ドメインイベント]
   # コマンドを書けるのはこの種別だけ。
   command_holders: [集約ルート, エンティティ]

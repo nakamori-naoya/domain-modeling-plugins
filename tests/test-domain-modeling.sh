@@ -47,14 +47,14 @@ cp "$FIX/domain-rule.md" "$TMP/rule.md"
 source_index "$TMP/rule.md" > "$TMP/index.json" 2>"$TMP/err" && ok "source.py prints the index" || ng "source.py: $(head -3 "$TMP/err")"
 jq -e '(.vocabulary|index("貸出")) and (.vocabulary|index("本が貸し出された")) and (.commands==["本を借りる","本を返す","延滞にする"]) and (.state_holders==["貸出"]) and (.states==["貸出中","延滞","返却済み"]) and (.bdd|length)==13' "$TMP/index.json" >/dev/null \
   && ok "index holds vocabulary, commands (not queries), states, BDD ids" || ng "index content: $(cat "$TMP/index.json")"
-# 反例: 「コマンドとクエリ」の節が無い正式な定義
+# 反例: 業務の行いの節が無い正式な定義
 python3 - "$TMP/rule.md" "$TMP/rule-nocommands.md" <<'PY'
 import sys, re
 t = open(sys.argv[1], encoding="utf-8").read()
-t = re.sub(r"## コマンドとクエリ\n.*?(?=\n# )", "", t, flags=re.S)
+t = re.sub(r"# 業務の行い\n.*?(?=\n# 導出されること)", "", t, flags=re.S)
 open(sys.argv[2], "w", encoding="utf-8").write(t)
 PY
-source_index "$TMP/rule-nocommands.md" >/dev/null 2>"$TMP/err" && ng "missing commands section should fail" || { grep -qF "コマンドとクエリ" "$TMP/err" && ok "missing commands section is rejected" || ng "diagnostic: $(head -2 "$TMP/err")"; }
+source_index "$TMP/rule-nocommands.md" >/dev/null 2>"$TMP/err" && ng "missing commands section should fail" || { grep -qF "業務の行い > コマンド" "$TMP/err" && ok "missing commands section is rejected" || ng "diagnostic: $(head -2 "$TMP/err")"; }
 # 境界例: 正式な定義のpathが相対、存在しない
 source_index "fixtures/rule.md" >/dev/null 2>&1 && ng "relative source should fail" || ok "relative source path is rejected"
 source_index "$TMP/missing.md" >/dev/null 2>&1 && ng "missing source should fail" || ok "missing source is rejected"
@@ -94,7 +94,7 @@ mutate "$TMP/m6.md" '        +本を返す()' $'        +本を返す()\n       
 expect_error "コマンド以外の行がある" "$TMP/m6.md"
 # 反例: コマンドがクエリか、正式な定義に無い
 mutate "$TMP/m7.md" '        +本を返す()' $'        +本を返す()\n        +借りている本を確かめる()'
-expect_error "コマンド「借りている本を確かめる」は、正式な定義の「コマンドとクエリ」でコマンドとした行いに無い" "$TMP/m7.md"
+expect_error "コマンド「借りている本を確かめる」は、正式な定義の業務の行いのコマンドに無い" "$TMP/m7.md"
 # 反例: ドメインイベントに中身がある
 mutate "$TMP/m8.md" $'<<ドメインイベント>>\n    }\n    class Returned' $'<<ドメインイベント>>\n        貸出日\n    }\n    class Returned'
 expect_error "ドメインイベント「本が貸し出された」に中身の行がある" "$TMP/m8.md"
