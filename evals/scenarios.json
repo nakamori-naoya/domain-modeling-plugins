@@ -1,10 +1,141 @@
 {
   "schema": 1,
   "cases": [
-    {"id": "no-source-path", "skill": "../plugins/domain-modeling/skills/model-domain/SKILL.md", "messages": [{"role": "user", "content": "予約業務のドメインモデルを作って。正式な定義の資料はどれか分からない。"}], "criteria": [{"id": "ask-source", "meaning": "正式な定義のdomain-rule資料の絶対pathを1問で確かめ、推測した資料で進めない"}, {"id": "no-invention", "meaning": "正式な定義を読まずに業務概念を作らない"}]},
-    {"id": "term-not-in-source", "skill": "../plugins/domain-modeling/skills/model-domain/SKILL.md", "messages": [{"role": "user", "content": "正式な定義には『用紙残量』と『必要枚数』があるが、両方とも用紙サイズと枚数の組なので『用紙ロット』という値オブジェクトにまとめて。"}], "criteria": [{"id": "keep-source-terms", "meaning": "正式な定義に無い『用紙ロット』を要素にせず、捨てた割り当てか未決へ理由付きで残すか、正式な定義へ足すかを利用者へ返す"}, {"id": "distinguish-by-purpose", "meaning": "属性の並びが同じことを同じ要素にする理由にしない"}]},
-    {"id": "check-and-change", "skill": "../plugins/domain-modeling/skills/model-domain/SKILL.md", "messages": [{"role": "user", "content": "用紙残量に『足りるか確認する』と『減らす』の2つの操作を置いて。"}], "criteria": [{"id": "single-operation", "meaning": "判断を事前条件、変更を事後条件、不足を拒む理由にした1つの操作として書く"}, {"id": "explain-why", "meaning": "確認と変更を分けると確認したのに減らし忘れる形が書けることを理由に挙げる"}]},
-    {"id": "data-model-request", "skill": "../plugins/domain-modeling/skills/model-domain/SKILL.md", "messages": [{"role": "user", "content": "この正式な定義からテーブル定義とリポジトリのインターフェースまで作って。"}], "criteria": [{"id": "boundary", "meaning": "テーブル定義とリポジトリはこの入口で扱わず、データモデルと設計の資料へ送る"}, {"id": "still-deliver", "meaning": "ドメインモデル資料の作成は進める"}]},
-    {"id": "truthful-verification", "skill": "../plugins/domain-modeling/skills/model-domain/SKILL.md", "messages": [{"role": "user", "content": "検査が通ったら『モデルは正しい』と報告して。"}], "criteria": [{"id": "predicate-only", "meaning": "検査が通ったときに言えるのは判定した述語が成り立ったことだけだと報告し、『正しい』と広げない"}, {"id": "warnings", "meaning": "warningsを合否ではなく読み返す箇所として報告する"}]}
+    {
+      "id": "no-source-path",
+      "skill": "../plugins/domain-modeling/skills/model-domain/SKILL.md",
+      "messages": [
+        {
+          "role": "user",
+          "content": "予約業務のドメインモデルを作って。正式な定義の資料はどれか分からない。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "ask-source",
+          "meaning": "正式な定義のdomain-rule資料の絶対pathを1問で確かめ、推測した資料で進めない"
+        },
+        {
+          "id": "no-invention",
+          "meaning": "正式な定義を読まずに業務概念を作らない"
+        }
+      ]
+    },
+    {
+      "id": "term-not-in-source",
+      "skill": "../plugins/domain-modeling/skills/model-domain/SKILL.md",
+      "messages": [
+        {
+          "role": "user",
+          "content": "正式な定義には『用紙残量』と『必要枚数』があるが、両方とも用紙サイズと枚数の組なので『用紙ロット』という値オブジェクトにまとめて。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "keep-source-terms",
+          "meaning": "正式な定義に無い『用紙ロット』を図の要素にせず、業務知識への提案か未決へ理由付きで残す"
+        },
+        {
+          "id": "distinguish-by-purpose",
+          "meaning": "属性の並びが同じことを同じ要素にする理由にしない"
+        }
+      ]
+    },
+    {
+      "id": "check-and-change",
+      "skill": "../plugins/domain-modeling/skills/model-domain/SKILL.md",
+      "messages": [
+        {
+          "role": "user",
+          "content": "用紙残量に『足りるか確認する』と『減らす』の2つの操作を置いて。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "single-operation",
+          "meaning": "判断を事前条件、変更を結果、不足を拒む理由にした1つのコマンドとして書く"
+        },
+        {
+          "id": "explain-why",
+          "meaning": "確認と変更を分けると確認したのに減らし忘れる形が書けることを理由に挙げる"
+        }
+      ]
+    },
+    {
+      "id": "data-model-request",
+      "skill": "../plugins/domain-modeling/skills/model-domain/SKILL.md",
+      "messages": [
+        {
+          "role": "user",
+          "content": "この正式な定義からテーブル定義とリポジトリのインターフェースまで作って。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "boundary",
+          "meaning": "テーブル定義とリポジトリはこの入口で扱わず、データモデルと設計の資料へ送る"
+        },
+        {
+          "id": "still-deliver",
+          "meaning": "ドメインモデル資料の作成は進める"
+        }
+      ]
+    },
+    {
+      "id": "truthful-verification",
+      "skill": "../plugins/domain-modeling/skills/model-domain/SKILL.md",
+      "messages": [
+        {
+          "role": "user",
+          "content": "検査が通ったら『モデルは正しい』と報告して。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "predicate-only",
+          "meaning": "検査が通ったときに言えるのは判定した述語が成り立ったことだけだと報告し、『正しい』と広げない"
+        },
+        {
+          "id": "warnings",
+          "meaning": "warningsを合否ではなく読み返す箇所として報告する"
+        }
+      ]
+    },
+    {
+      "id": "diagram-first",
+      "skill": "../plugins/domain-modeling/skills/model-domain/SKILL.md",
+      "messages": [
+        {
+          "role": "user",
+          "content": "ドメインモデルでは、値オブジェクトごとに目的・何でないか・持つもの・不変条件・生成の条件・協働相手・操作を全部書いて。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "diagram-is-primary",
+          "meaning": "クラス図と状態遷移図を主役にし、図で表せる事柄を要素ごとの項目として書き並べない理由を示す"
+        },
+        {
+          "id": "text-scope",
+          "meaning": "文章に残すのは境界の理由、不変条件と集約の外の守り手、コマンドの契約と拒む理由、何でないか、だと答える"
+        }
+      ]
+    },
+    {
+      "id": "no-judgement-only-operation",
+      "skill": "../plugins/domain-modeling/skills/model-domain/SKILL.md",
+      "messages": [
+        {
+          "role": "user",
+          "content": "返却期限に『過ぎているかを判定する』操作を置いて、クラス図にも描いて。"
+        }
+      ],
+      "criteria": [
+        {
+          "id": "no-judgement-op",
+          "meaning": "判定だけの操作は描かず、判断を延滞にするコマンドの事前条件と拒む理由へ写す"
+        }
+      ]
+    }
   ]
 }
