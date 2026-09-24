@@ -2,7 +2,7 @@
 """domain-ruleの正式な定義から、図に使ってよい語の索引を機械的に抜き出し、標準出力へJSONで返す。
 
 正式な定義の見出し名は同じdirectoryの playbook.yml の contract.source_sections が持つ。ここは見出しの名前を知らず、
-その見出しの下にある表のセル・小見出し・BDD番号を拾うだけで、意味の判断はしない。
+その見出しの下の小見出し、状態遷移図の状態、BDD番号を拾うだけで、意味の判断はしない。
 索引はfileへ書かない。verify.py は同じ build_index を呼び、正式な定義のpathから毎回同じ索引を導く。
 
   source.py --playbook <同じdirectoryのplaybook.yml> --source <domain-ruleの正式な定義の絶対path>
@@ -21,6 +21,7 @@ import sys
 
 HEADING = re.compile(r"^(#{1,6})[ ]+(.+?)[ ]*$")
 BDD_ID = re.compile(r"\[(BDD-\d{3,})\]")
+TRANSITION = re.compile(r"^(\[\*\]|[^\s:]+)\s*-->\s*(\[\*\]|[^\s:]+)\s*(?::\s*(.*))?$")
 REQUIRED_ROLES = ("terms", "commands", "bdd")
 
 
@@ -76,22 +77,22 @@ def section(nodes: list[dict], title: str) -> tuple[dict, list[dict]] | None:
     return None
 
 
-def table_rows(lines: list[str]) -> list[list[str]]:
-    """Markdown表の本文行をセルの列で返す。見出し行と区切り行は除く。"""
-    rows: list[list[str]] = []
-    header_seen = False
+def diagram_states(lines: list[str]) -> list[str]:
+    """stateDiagram-v2 の遷移の行から、[*] 以外の状態名を順に拾う。"""
+    states: list[str] = []
+    in_diagram = False
     for line in lines:
         stripped = line.strip()
-        if not stripped.startswith("|"):
-            header_seen = False
+        if stripped.startswith("```"):
+            in_diagram = False
             continue
-        cells = [strip_markup(cell) for cell in stripped.strip("|").split("|")]
-        if all(set(cell) <= set("-: ") for cell in cells):
-            header_seen = True
+        if stripped == "stateDiagram-v2":
+            in_diagram = True
             continue
-        if header_seen and cells and cells[0]:
-            rows.append(cells)
-    return rows
+        match = TRANSITION.match(stripped) if in_diagram else None
+        if match:
+            states.extend(state for state in match.groups()[:2] if state != "[*]")
+    return states
 
 
 def unique(words: list[str]) -> list[str]:
@@ -114,26 +115,33 @@ def build_index(playbook_path: Path, source_raw: str) -> dict:
 
     index: dict = {"terms": [], "events": [], "commands": [], "concepts": [],
                    "state_holders": [], "states": [], "bdd": []}
-    found = own_and_children("terms")
-    if found:
-        index["terms"] = unique([row[0] for row in table_rows(found[0]["lines"])])
-    found = own_and_children("events")
-    if found:
-        index["events"] = unique([row[0] for row in table_rows(found[0]["lines"])])
-    found = own_and_children("commands")
-    if found:
-        index["commands"] = unique([row[0] for row in table_rows(found[0]["lines"])
-                                    if len(row) > 1 and row[1] == contract["command_kind"]])
-    found = own_and_children("concepts")
+
+    def headings_under(role: str, depth: int) -> list[str]:
+        found = own_and_children(role)
+        if not found:
+            return []
+        node, children = found
+        return unique([c["title"] for c in children if c["level"] == node["level"] + depth])
+
+    index["terms"] = headings_under("terms", 1)
+    index["events"] = headings_under("events", 1)
+    index["concepts"] = headings_under("concepts", 1)
+    found = own_and_children("actions")
     if found:
         node, children = found
-        index["concepts"] = unique([c["title"] for c in children if c["level"] == node["level"] + 1])
+        in_commands = False
+        for child in children:
+            if child["level"] == node["level"] + 1:
+                in_commands = child["title"] == contract["command_group"]
+            elif child["level"] == node["level"] + 2 and in_commands:
+                index["commands"].append(child["title"])
+        index["commands"] = unique(index["commands"])
     found = own_and_children("states")
     if found:
         node, children = found
         holders = [c for c in children if c["level"] == node["level"] + 1]
         index["state_holders"] = unique([c["title"] for c in holders])
-        index["states"] = unique([row[0] for c in holders for row in table_rows(c["lines"])])
+        index["states"] = unique([state for c in holders for state in diagram_states(c["lines"])])
     found = own_and_children("bdd")
     if found:
         node, children = found
@@ -142,7 +150,8 @@ def build_index(playbook_path: Path, source_raw: str) -> dict:
             ids.extend(BDD_ID.findall(text))
         index["bdd"] = unique(ids)
 
-    missing = [sections[role] for role in REQUIRED_ROLES if not index[role]]
+    labels = {"terms": sections["terms"], "commands": f"{sections['actions']} > {contract['command_group']}", "bdd": sections["bdd"]}
+    missing = [labels[role] for role in REQUIRED_ROLES if not index[role]]
     if missing:
         raise ValueError("正式な定義に契約の節が無いか空である: " + ", ".join(missing))
     vocabulary = unique(index["terms"] + index["events"] + index["concepts"]
