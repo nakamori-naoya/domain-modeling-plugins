@@ -1,24 +1,33 @@
 #!/usr/bin/env python3
 """候補のドメインモデル本文が、図の構造契約を満たすかを検査する。
 
-検査するのは述語であって、モデルの良し悪しではない。通ったときに言えるのは次だけである。
-
-  - 「クラス図」の節に Mermaid classDiagram があり、「未決」の節が空でない
-  - クラス図の各クラスのラベルが、正式な定義から機械抽出した索引の語である
-  - 各クラスが契約の種別を一つだけ持つ（値オブジェクトなどに「・文脈共有」を添えてよい）。同じラベルの種別が図ごとに食い違わない
-  - コマンド（+名前(引数)）は集約ルートかエンティティにだけあり、その名前が正式な定義でコマンドとした行いである
-  - 集約ルートとエンティティはコマンド以外の行を持たない。値オブジェクトは取り得る値の行を持ってよいが、コマンドを持たない。ドメインイベントは何も持たない
-  - 関係の線が宣言済みのクラスだけを結ぶ
-  - 正式な定義で状態を持つとされた集約ルートには同じ語の H2 節があり、その中に stateDiagram-v2 があり、状態が索引の状態で、
-    矢印のラベルがその集約のコマンドである。状態遷移図は集約ルートの節の中にだけある
-  - 集約ルートの H2 節の中の H3 は、契約の決まった節（状態遷移・守ること・取り違えやすいもの）か、クラス図に描いたコマンドである。
-    コマンドごとの節は求めない（書くことのあるコマンドにだけ置く）
+基準資料: 同じdirectoryの playbook.yml の contract と、domain-ruleの正式な定義（source.py の build_index が索引を導く）。
+入力: 標準入力の候補本文（Markdown）、--playbook、--source。索引fileも候補fileも受け取らない。
+正規化: コードフェンスの外の行だけを見出しと本文として読む。```mermaid の中は、先頭の行（classDiagram / stateDiagram-v2）で図の種類を決め、
+  空行と %% の注釈行を除く。見出しの `*` `_` と backtick は外して比べる。
+合格述語:
+  - 「クラス図」の節がちょうど一つあり、その中に classDiagram がある。「未決」の節があり空でない
+  - クラスのラベルが索引の語である。種別がちょうど一つで、契約の種別（値オブジェクトなどに「・文脈共有」を添えてよい）である。
+    同じラベルの種別が図ごとに食い違わない。関係の線が宣言済みのクラスだけを結ぶ
+  - コマンド（+名前(引数)）は集約ルートとエンティティにだけあり、名前が正式な定義でコマンドとした行い、引数が同じ図のクラスのラベルである。
+    集約ルートとエンティティはコマンド以外の行を持たない。値オブジェクトは括弧を含まない行（取り得る値か、判断に使う業務の語）だけを持つ。
+    ドメインイベントは何も持たない
+  - 正式な定義で状態を持つ集約ルートには同じ語の H2 節と、その中の stateDiagram-v2 がある。状態は索引の状態、矢印のラベルはその集約のコマンドで、
+    終端への矢印だけラベルを省ける。状態遷移図は集約ルートの節の外に無い
+  - 集約ルートの H2 節の中の H3 は、契約の決まった節か、クラス図に描いたコマンドである
   - 本文が引くBDD番号（「BDD-001〜006」の範囲を含む）が正式な定義にある
-  - 「業務知識への提案」の節があれば、提案ごとの H3 見出しがあり、その語が図のラベルに無い
+  - 「業務知識への提案」の節があれば提案ごとの H3 があり、その語が図のラベルに無い
+失敗時の診断: 標準エラーへ「[error] <どの要素が、どの述語に反したか>」を1行ずつ。終了code 2。
+正例: tests/fixtures/library-lending（集約一つ、状態あり、提案あり）と tests/fixtures/member-directory（業務の決まりが薄く、クラス図と未決だけ）。
+反例と境界例: tests/test-domain-modeling.sh が正例を1か所ずつ変えて作る（索引外の語、契約外の種別、値オブジェクトの操作、集約ルートのフィールド、
+  クエリをコマンドにする、図に無い引数、状態遷移図の欠落と索引外の状態、業務イベントを矢印に使う、未知のBDD番号、表だけの提案、空の未決、
+  集約の節の中の余計な見出し。境界例: 空の標準入力、コマンドの節の無いコマンド、提案の節の無い資料、取り得る値の行、BDDの範囲表記）。
+意味評価として残す範囲: 境界の引き方と集約の数、受け付けない状態ごとの拒む理由がそろっているか、文章が図の言い直しになっていないか、
+  値オブジェクトの行が業務の語か、warnings の本文が引いていないBDDが本当に集約の外で成立するか。
 
   verify.py --playbook <同じdirectoryのplaybook.yml> --source <domain-ruleの正式な定義の絶対path>  < <候補本文（Markdown）>
 
-exit 0 = 通った（stdoutに verified, source_path, warnings） / 2 = 標準入力が空、正式な定義が契約の節を持たない、または述語が成り立たない（診断は標準エラー）。
+exit 0 = 通った（stdoutに verified, source_path, warnings） / 2 = 標準入力が空、正式な定義が契約の節を持たない、または述語が成り立たない。
 """
 
 from __future__ import annotations
@@ -154,6 +163,7 @@ def check(body: str, index: dict, contract: dict) -> list[str]:
     commands_of: dict[str, list[str]] = {}
     for diagram in (d for d in diagrams if d["kind"] == "classDiagram"):
         classes, relations = parse_class_diagram(diagram["lines"], errors)
+        labels_in_diagram = {cls["label"] for cls in classes.values()}
         for source_id, target_id in relations:
             for end in (source_id, target_id):
                 if end not in classes:
@@ -187,6 +197,9 @@ def check(body: str, index: dict, contract: dict) -> list[str]:
                         errors.append(f"クラス「{label}」のコマンド「{name}」は、正式な定義の「コマンドとクエリ」でコマンドとした行いに無い")
                     if name not in own_commands:
                         own_commands.append(name)
+                    for argument in (arg.strip() for arg in command.group(2).split(",")):
+                        if argument and argument not in labels_in_diagram:
+                            errors.append(f"クラス「{label}」のコマンド「{name}」の引数「{argument}」が、同じ図のクラスのラベルに無い。受け取る値をクラスとして描く")
                 elif kind == "値オブジェクト":
                     if "(" in line or ")" in line:
                         errors.append(f"値オブジェクト「{label}」に操作がある: {line}。コマンドは集約ルートかエンティティにだけ描く")
@@ -239,7 +252,7 @@ def check(body: str, index: dict, contract: dict) -> list[str]:
     if unknown:
         errors.append("本文が引くBDD番号が正式な定義に無い: " + ", ".join(unknown))
     uncited = [ref for ref in index["bdd"] if ref not in cited]
-    if uncited:
+    if uncited and any(root in h2_by_title for root in roots):
         warnings.append("本文が引いていない正式な定義のBDD（集約の外で成立するものか、要素の不足かを読み返す）: " + ", ".join(uncited))
 
     # ── 業務知識への提案 ──
