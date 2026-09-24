@@ -11,3 +11,7 @@
 - 正式な定義を作る`bdd-discovery-and-formulation`は実行時の依存ではなく、その資料の絶対pathを入力として受け取るだけである。正式な定義の明示索引に無い語を要素にせず、新しい業務の事実が要ると分かったら仮説を未決に残して資料を完成させ、正式な定義の反証を提案する。
 - agentが作った候補本文は検査scriptへ標準入力で渡す。作業directory、一時file、後片付け工程を置かない。
 - 変更後は`bash scripts/validate.sh`と、workspace rootの`bash scripts/validate.sh <このrepositoryの絶対path>`を実行する。保守tool（root validator、消費側契約lint、回帰検査、release、eval runner）の参照元は兄弟checkout `../harness-tools/tools/` だけで、このrepositoryは複製を持たない。違反は`../harness-tools/tools/lint-consumer-contract.py`と`tests/test-domain-modeling.sh`が落とす。
+
+## 検査スクリプトは、意味が一意に決まることだけを判定する
+
+このrepositoryの検査スクリプト（validate、lint、verify、checkなど、名前を問わない）が判定してよいのは、ファイルや見出しの有無、識別子や版の一致、宣言と配置の対応、禁止された書き方の有無のように、入力と基準資料から意味が決定論的に一意に決まることだけである。読んで解釈しないと決まらないことや、件数や語の出現のような品質の代わりの指標は判定せず、エージェントが読んで評価する（意味評価）。判定が一意に決まることを宣言できない検査は作らず、詳しい条件は `/Users/naoya-nakamoriq/Documents/Github/harness-pluginsv2/.agents/rules/deterministic-validation.md` に従う。
