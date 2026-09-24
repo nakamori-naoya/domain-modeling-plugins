@@ -75,7 +75,7 @@ jq -e '.verified==true and (.source_path|endswith("rule.md")) and (.warnings|typ
 : > "$TMP/empty.md"
 expect_error "標準入力が空" "$TMP/empty.md"
 # 反例: 索引に無い語をクラスにする（業務知識の文中にだけ現れる語も同じ）
-mutate "$TMP/m1.md" 'class Standing["貸出状況"]' 'class Standing["利用者カード"]'
+mutate "$TMP/m1.md" 'class BorrowerStanding["貸出状況"]' 'class BorrowerStanding["利用者カード"]'
 expect_error "クラス「利用者カード」は正式な定義の索引に無い語" "$TMP/m1.md"
 # 反例: 種別が契約に無い
 mutate "$TMP/m2.md" '<<値オブジェクト・文脈共有>>' '<<外部の集約>>'
@@ -84,10 +84,10 @@ expect_error "種別「外部の集約」は契約に無い" "$TMP/m2.md"
 mutate "$TMP/m3.md" '<<値オブジェクト・文脈共有>>' '<<値オブジェクト・共通>>'
 expect_error "種別「値オブジェクト・共通」は契約に無い" "$TMP/m3.md"
 # 反例: 種別が無い
-mutate "$TMP/m4.md" $'        <<値オブジェクト>>\n    }\n    class Due' $'    }\n    class Due'
+mutate "$TMP/m4.md" $'        <<値オブジェクト>>\n    }\n    class DueDate' $'    }\n    class DueDate'
 expect_error "種別（<<…>>）をちょうど1つ持たない" "$TMP/m4.md"
 # 反例: 値オブジェクトに判定だけの操作
-mutate "$TMP/m5.md" $'<<値オブジェクト>>\n    }\n    class Standing' $'<<値オブジェクト>>\n        +過ぎているか(日付)\n    }\n    class Standing'
+mutate "$TMP/m5.md" $'<<値オブジェクト>>\n    }\n    class BorrowerStanding' $'<<値オブジェクト>>\n        +過ぎているか(日付)\n    }\n    class BorrowerStanding'
 expect_error "に操作がある" "$TMP/m5.md"
 # 反例: 集約ルートにフィールド
 mutate "$TMP/m6.md" '        +本を返す()' $'        +本を返す()\n        -返却期限'
@@ -96,16 +96,16 @@ expect_error "コマンド以外の行がある" "$TMP/m6.md"
 mutate "$TMP/m7.md" '        +本を返す()' $'        +本を返す()\n        +借りている本を確かめる()'
 expect_error "コマンド「借りている本を確かめる」は、正式な定義の業務の行いのコマンドに無い" "$TMP/m7.md"
 # 反例: ドメインイベントに中身がある
-mutate "$TMP/m8.md" $'<<ドメインイベント>>\n    }\n    class Returned' $'<<ドメインイベント>>\n        貸出日\n    }\n    class Returned'
+mutate "$TMP/m8.md" $'<<ドメインイベント>>\n    }\n    class LoanReturned' $'<<ドメインイベント>>\n        貸出日\n    }\n    class LoanReturned'
 expect_error "ドメインイベント「本が貸し出された」に中身の行がある" "$TMP/m8.md"
 # 境界例: 取り得る値が限られる値オブジェクトは値の行を持ってよい
-mutate "$TMP/b1.md" $'<<値オブジェクト>>\n    }\n    class Standing' $'<<値オブジェクト>>\n        14日後\n    }\n    class Standing'
+mutate "$TMP/b1.md" $'<<値オブジェクト>>\n    }\n    class BorrowerStanding' $'<<値オブジェクト>>\n        14日後\n    }\n    class BorrowerStanding'
 expect_ok "$TMP/b1.md" "value object may list its possible values"
 # 反例: コマンドの引数が図のクラスに無い（業務知識の語でない「日付」）
 mutate "$TMP/m21.md" '+延滞にする(判定日時)' '+延滞にする(日付)'
 expect_error "引数「日付」が、同じ図のクラスのラベルに無い" "$TMP/m21.md"
 # 反例: 関係の線が宣言の無いクラスを結ぶ
-mutate "$TMP/m9.md" '    Loan *-- Due' $'    Loan *-- Due\n    Loan *-- Ghost'
+mutate "$TMP/m9.md" '    Loan *-- DueDate' $'    Loan *-- DueDate\n    Loan *-- Ghost'
 expect_error "宣言の無いクラスを結んでいる: Ghost" "$TMP/m9.md"
 # 反例: 集約ルートの節が無い
 mutate "$TMP/m10.md" $'\n## 貸出\n' $'\n## 貸出のこと\n'
