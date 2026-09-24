@@ -37,7 +37,7 @@ description: 業務知識・コアドメイン（domain-rule）の正式な定�
 
 ## 手順
 
-1. **index-source（`scripts/source.py`）。** `python3 scripts/source.py --playbook playbook.yml --source <domain_rule_path>`を実行する（pathはこのSKILLのdirectory基準）。正式な定義から業務用語、業務イベント、コマンド、概念、状態、BDD番号を抜き出し、終了code 0で標準出力へ索引JSONを返す。`vocabulary`が図のクラスに使える語、`commands`がコマンドに使える語、`states`が状態遷移図に使える状態である。業務用語、コマンドとクエリ、BDDの節が無いか空なら終了code 2と診断を標準エラーへ返すので、正式な定義を直してもらうよう報告して止まる。
+1. **index-source（`scripts/source.py`）。** `python3 scripts/source.py --playbook playbook.yml --source <domain_rule_path>`を実行する（pathはこのSKILLのdirectory基準）。正式な定義から業務用語、業務イベント、コマンド、概念、状態、BDD番号を抜き出し、終了code 0で標準出力へ索引JSONを返す。`vocabulary`が図のクラスに使える語、`commands`がコマンドに使える語、`states`が状態遷移図に使える状態である。業務用語、業務の行いのコマンド、BDDが無いか空なら終了code 2と診断を標準エラーへ返すので、正式な定義を直してもらうよう報告して止まる。
 
 2. **settle（`grill`）。** 答えによって図の形（集約の数と境界、集合への規則の守り手、業務知識の状態をそのまま使えないときの状態の分け方、要素の有無）が変わる割り当てだけを、成果を左右する順に推奨を添えて問う。正式な定義と索引から読み取れることは問わない。
 
