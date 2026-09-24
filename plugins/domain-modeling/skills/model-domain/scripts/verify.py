@@ -14,15 +14,16 @@
     ドメインイベントは何も持たない
   - 正式な定義で状態を持つ集約ルートには同じ語の H2 節と、その中の stateDiagram-v2 がある。状態は索引の状態、矢印のラベルはその集約のコマンドで、
     終端への矢印だけラベルを省ける。状態遷移図は集約ルートの節の外に無い
-  - 集約ルートの H2 節の中の H3 は、契約の決まった節か、クラス図に描いたコマンドである
+  - 集約ルートの H2 節の中の H3 は、契約の決まった節か、クラス図に描いたコマンドである。状態遷移図で矢印の出ていない状態があるコマンド
+    （生成のコマンドを除く）は、その集約の節の中に同じ語の H3 を持つ（拒む理由の置き場）
   - 本文が引くBDD番号（「BDD-001〜006」の範囲を含む）が正式な定義にある
   - 「業務知識への提案」の節があれば提案ごとの H3 があり、その語が図のラベルに無い
 失敗時の診断: 標準エラーへ「[error] <どの要素が、どの述語に反したか>」を1行ずつ。終了code 2。
 正例: tests/fixtures/library-lending（集約一つ、状態あり、提案あり）と tests/fixtures/member-directory（業務の決まりが薄く、クラス図と未決だけ）。
 反例と境界例: tests/test-domain-modeling.sh が正例を1か所ずつ変えて作る（索引外の語、契約外の種別、値オブジェクトの操作、集約ルートのフィールド、
   クエリをコマンドにする、図に無い引数、状態遷移図の欠落と索引外の状態、業務イベントを矢印に使う、未知のBDD番号、表だけの提案、空の未決、
-  集約の節の中の余計な見出し。境界例: 空の標準入力、コマンドの節の無いコマンド、提案の節の無い資料、取り得る値の行、BDDの範囲表記）。
-意味評価として残す範囲: 境界の引き方と集約の数、受け付けない状態ごとの拒む理由がそろっているか、文章が図の言い直しになっていないか、
+  集約の節の中の余計な見出し、受け付けない状態があるのに拒む理由の節の無いコマンド。境界例: 空の標準入力、コマンドの節の無いコマンド、提案の節の無い資料、取り得る値の行、BDDの範囲表記）。
+意味評価として残す範囲: 境界の引き方と集約の数、拒む理由の節が受け付けない状態のすべてを一文ずつ書いているか、文章が図の言い直しになっていないか、
   値オブジェクトの行が業務の語か、warnings の本文が引いていないBDDが本当に集約の外で成立するか。
 
   verify.py --playbook <同じdirectoryのplaybook.yml> --source <domain-ruleの正式な定義の絶対path>  < <候補本文（Markdown）>
@@ -224,6 +225,8 @@ def check(body: str, index: dict, contract: dict) -> list[str]:
         state_diagrams = [d for d in diagrams if d["kind"] == "stateDiagram-v2" and d["h2"] == label]
         if label in index["state_holders"] and not state_diagrams:
             errors.append(f"正式な定義で状態を持つ「{label}」の節に stateDiagram-v2 が無い")
+        outgoing: dict[str, set[str]] = {}
+        diagram_states: set[str] = set()
         for diagram in state_diagrams:
             for line in diagram["lines"]:
                 transition = TRANSITION.match(line)
@@ -238,6 +241,16 @@ def check(body: str, index: dict, contract: dict) -> list[str]:
                     continue
                 if not command or command.strip() not in commands_of.get(label, []):
                     errors.append(f"「{label}」の状態遷移図の矢印「{line}」のラベルが、クラス図でこの集約に描いたコマンドではない")
+                    continue
+                diagram_states.update(state for state in (source_state, target_state) if state != "[*]")
+                outgoing.setdefault(command.strip(), set()).add(source_state)
+        for name in commands_of.get(label, []):
+            sources = outgoing.get(name, set())
+            if sources and sources <= {"[*]"}:
+                continue
+            refused = sorted(diagram_states - sources)
+            if refused and name not in h2["h3"]:
+                errors.append(f"「{label}」のコマンド「{name}」は状態 {'・'.join(refused)} から矢印が無いのに、拒む理由を書く「### {name}」節が「## {label}」の中に無い")
     stray = [d for d in diagrams if d["kind"] == "stateDiagram-v2" and d["h2"] not in roots]
     for diagram in stray:
         errors.append(f"状態遷移図が集約ルートの節の外（「## {diagram['h2']}」）にある")
