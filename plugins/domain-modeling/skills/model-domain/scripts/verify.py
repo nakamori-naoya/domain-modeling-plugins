@@ -9,10 +9,12 @@
   - コマンド（+名前(引数)）は集約ルートかエンティティにだけあり、その名前が正式な定義でコマンドとした行いである
   - 集約ルートとエンティティはコマンド以外の行を持たない。値オブジェクトは取り得る値の行を持ってよいが、コマンドを持たない。ドメインイベントは何も持たない
   - 関係の線が宣言済みのクラスだけを結ぶ
-  - 集約ルートごとに同じ語の H2 節があり、その集約のコマンドごとに同じ語の H3 節がその中にある
-  - 正式な定義で状態を持つとされた集約ルートの節に stateDiagram-v2 があり、状態が索引の状態で、矢印のラベルがその集約のコマンドである
-  - 本文が引くBDD番号が正式な定義にある
-  - 「業務知識への提案」の節があれば、提案した語が図のラベルに無い
+  - 正式な定義で状態を持つとされた集約ルートには同じ語の H2 節があり、その中に stateDiagram-v2 があり、状態が索引の状態で、
+    矢印のラベルがその集約のコマンドである。状態遷移図は集約ルートの節の中にだけある
+  - 集約ルートの H2 節の中の H3 は、契約の決まった節（状態遷移・守ること・取り違えやすいもの）か、クラス図に描いたコマンドである。
+    コマンドごとの節は求めない（書くことのあるコマンドにだけ置く）
+  - 本文が引くBDD番号（「BDD-001〜006」の範囲を含む）が正式な定義にある
+  - 「業務知識への提案」の節があれば、提案ごとの H3 見出しがあり、その語が図のラベルに無い
 
   verify.py --playbook <同じdirectoryのplaybook.yml> --source <domain-ruleの正式な定義の絶対path>  < <候補本文（Markdown）>
 
@@ -29,14 +31,25 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from source import HEADING, build_index, load_yaml, strip_markup, table_rows  # noqa: E402
+from source import HEADING, build_index, load_yaml, strip_markup  # noqa: E402
 
-BDD_REF = re.compile(r"BDD-\d{3,}")
+BDD_REF = re.compile(r"BDD-(\d{3,})(?:〜(?:BDD-)?(\d{3,}))?")
 CLASS_DECL = re.compile(r'^class\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\["([^"]+)"\])?\s*(\{)?\s*$')
 RELATION = re.compile(r'^([A-Za-z_][A-Za-z0-9_]*)\s*(?:"[^"]*"\s*)?(<\|--|\*--|o--|-->|<--|\.\.>|<\.\.|--\*|--o|--\|>|\.\.\|>|--|\.\.)\s*(?:"[^"]*"\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*(?::.*)?$')
 STEREOTYPE = re.compile(r"^<<(.+)>>$")
 COMMAND = re.compile(r"^\+\s*([^()]+?)\s*\((.*)\)\s*$")
 TRANSITION = re.compile(r"^(\[\*\]|[^\s:]+)\s*-->\s*(\[\*\]|[^\s:]+)\s*(?::\s*(.*))?$")
+
+
+def cited_bdd(line: str) -> list[str]:
+    """行が引くBDD番号を返す。「BDD-001〜006」「BDD-001〜BDD-006」は範囲として展開する。"""
+    refs: list[str] = []
+    for start, end in BDD_REF.findall(line):
+        width = len(start)
+        last = int(end) if end else int(start)
+        for number in range(int(start), max(int(start), last) + 1):
+            refs.append(f"BDD-{number:0{width}d}")
+    return refs
 
 
 class Invalid(Exception):
@@ -180,20 +193,21 @@ def check(body: str, index: dict, contract: dict) -> list[str]:
                 else:
                     errors.append(f"ドメインイベント「{label}」に中身の行がある: {line}")
 
-    # ── 集約ごとの節、コマンドの節、状態遷移図 ──
+    # ── 集約ごとの節と状態遷移図 ──
     h2_by_title = {h2["title"]: h2 for h2 in h2s}
-    aggregate_sections = set()
-    for label, kind in kind_of.items():
-        if kind != "集約ルート":
-            continue
-        aggregate_sections.add(label)
+    roots = [label for label, kind in kind_of.items() if kind == "集約ルート"]
+    fixed_subsections = set(contract["aggregate_subsections"])
+    all_commands = {name for names in commands_of.values() for name in names}
+    for label in roots:
         h2 = h2_by_title.get(label)
-        if h2 is None:
-            errors.append(f"集約ルート「{label}」の「## {label}」節が無い")
+        if label in index["state_holders"] and h2 is None:
+            errors.append(f"正式な定義で状態を持つ「{label}」の「## {label}」節が無い（状態遷移図を置く）")
             continue
-        for name in commands_of.get(label, []):
-            if name not in h2["h3"]:
-                errors.append(f"集約「{label}」のコマンド「{name}」の「### {name}」節が「## {label}」の中に無い")
+        if h2 is None:
+            continue
+        for title in h2["h3"]:
+            if title not in fixed_subsections and title not in all_commands:
+                errors.append(f"「## {label}」の中の「### {title}」は、{'・'.join(sorted(fixed_subsections))}でも、クラス図に描いたコマンドでもない")
         state_diagrams = [d for d in diagrams if d["kind"] == "stateDiagram-v2" and d["h2"] == label]
         if label in index["state_holders"] and not state_diagrams:
             errors.append(f"正式な定義で状態を持つ「{label}」の節に stateDiagram-v2 が無い")
@@ -211,18 +225,14 @@ def check(body: str, index: dict, contract: dict) -> list[str]:
                     continue
                 if not command or command.strip() not in commands_of.get(label, []):
                     errors.append(f"「{label}」の状態遷移図の矢印「{line}」のラベルが、クラス図でこの集約に描いたコマンドではない")
-    entity_commands = [(label, name) for label, kind in kind_of.items() if kind == "エンティティ" for name in commands_of.get(label, [])]
-    for label, name in entity_commands:
-        if not any(name in h2_by_title[t]["h3"] for t in aggregate_sections if t in h2_by_title):
-            errors.append(f"エンティティ「{label}」のコマンド「{name}」の「### {name}」節が、どの集約の節にも無い")
-    stray = [d for d in diagrams if d["kind"] == "stateDiagram-v2" and d["h2"] not in aggregate_sections]
+    stray = [d for d in diagrams if d["kind"] == "stateDiagram-v2" and d["h2"] not in roots]
     for diagram in stray:
         errors.append(f"状態遷移図が集約ルートの節の外（「## {diagram['h2']}」）にある")
 
     # ── BDD番号 ──
     cited = []
     for line in prose:
-        for ref in BDD_REF.findall(line):
+        for ref in cited_bdd(line):
             if ref not in cited:
                 cited.append(ref)
     unknown = [ref for ref in cited if ref not in index["bdd"]]
@@ -235,9 +245,9 @@ def check(body: str, index: dict, contract: dict) -> list[str]:
     # ── 業務知識への提案 ──
     proposal = h2_by_title.get(contract["proposal_section"])
     if proposal is not None:
-        proposed = [row[0] for row in table_rows(proposal["lines"])]
+        proposed = proposal["h3"]
         if not proposed:
-            errors.append(f"「## {contract['proposal_section']}」に表が無い。提案が無ければ見出しごと置かない")
+            errors.append(f"「## {contract['proposal_section']}」に提案ごとの ### 見出しが無い。提案が無ければ見出しごと置かない")
         for word in proposed:
             if word in kind_of:
                 errors.append(f"業務知識への提案の語「{word}」が図のクラスにある。提案した語は図に使わない")
