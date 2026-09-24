@@ -102,7 +102,7 @@ expect_error "ドメインイベント「本が貸し出された」に中身の
 mutate "$TMP/b1.md" $'<<値オブジェクト>>\n    }\n    class Standing' $'<<値オブジェクト>>\n        14日後\n    }\n    class Standing'
 expect_ok "$TMP/b1.md" "value object may list its possible values"
 # 反例: コマンドの引数が図のクラスに無い（業務知識の語でない「日付」）
-mutate "$TMP/m21.md" '+延滞にする(判定日)' '+延滞にする(日付)'
+mutate "$TMP/m21.md" '+延滞にする(判定日時)' '+延滞にする(日付)'
 expect_error "引数「日付」が、同じ図のクラスのラベルに無い" "$TMP/m21.md"
 # 反例: 関係の線が宣言の無いクラスを結ぶ
 mutate "$TMP/m9.md" '    Loan *-- Due' $'    Loan *-- Due\n    Loan *-- Ghost'
