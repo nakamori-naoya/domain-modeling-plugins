@@ -60,8 +60,14 @@ source_index "fixtures/rule.md" >/dev/null 2>&1 && ng "relative source should fa
 source_index "$TMP/missing.md" >/dev/null 2>&1 && ng "missing source should fail" || ok "missing source is rejected"
 
 # ── 検査（verify.py） ─────────────────────────────────────────────
-# 記法の正本は write-doc の domain-model 型の template である。この試験は template を読まない（別 repository の版に合否を依らせない）。
-# 正例の fixture は write-doc の見本と同じ本文で、template との一致は意味評価で確かめる。
+# 記法の正本は write-doc の domain-model 型の template である。template と playbook の contract の一致は、
+# 兄弟 checkout の write-doc の見本（template と同じ記法で書いた記載例）を verify.py に通して確かめる。見本が無ければ失敗させる。
+EXAMPLE="$ROOT/../write-doc-plugins/plugins/write-doc/skills/write-doc/assets/examples/domain-model.example.md"
+if [ -f "$EXAMPLE" ] && python3 "$PB/scripts/verify.py" --playbook "$PB/playbook.yml" --source "$TMP/rule.md" < "$EXAMPLE" >/dev/null 2>"$TMP/err"; then
+  ok "write-doc domain-model example passes verify.py"
+else
+  ng "write-doc domain-model example does not pass verify.py: $EXAMPLE $(head -3 "$TMP/err" 2>/dev/null)"
+fi
 expect_ok "$FIX/domain-model.md" "library example passes"
 jq -e '.verified==true and (.source_path|endswith("rule.md")) and (.warnings|type=="array")' "$TMP/out" >/dev/null && ok "verify returns verified, source_path, warnings" || ng "verify output shape"
 
@@ -111,10 +117,18 @@ expect_error "「### 貸出状況」は" "$TMP/m11.md"
 python3 - "$FIX/domain-model.md" "$TMP/b4.md" <<'PY2'
 import sys, re
 t = open(sys.argv[1], encoding="utf-8").read()
+t = re.sub(r"### 本を借りる\n.*?(?=### 本を返す)", "", t, flags=re.S)
+open(sys.argv[2], "w", encoding="utf-8").write(t)
+PY2
+expect_ok "$TMP/b4.md" "a creation command without its own section passes"
+# 反例: 受け付けない状態（返却済み）があるのに、拒む理由の節が無い
+python3 - "$FIX/domain-model.md" "$TMP/m22.md" <<'PY2'
+import sys, re
+t = open(sys.argv[1], encoding="utf-8").read()
 t = re.sub(r"### 本を返す\n.*?(?=### 延滞にする)", "", t, flags=re.S)
 open(sys.argv[2], "w", encoding="utf-8").write(t)
 PY2
-expect_ok "$TMP/b4.md" "a command without its own section passes"
+expect_error "状態 返却済み から矢印が無いのに、拒む理由を書く「### 本を返す」節" "$TMP/m22.md"
 # 反例: 状態を持つ集約に状態遷移図が無い
 python3 - "$FIX/domain-model.md" "$TMP/m12.md" <<'PY'
 import sys, re
