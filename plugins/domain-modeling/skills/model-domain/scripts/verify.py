@@ -1,27 +1,22 @@
 #!/usr/bin/env python3
-"""候補モデルが契約を満たすかを検査し、通ったものだけを返す。
+"""候補のドメインモデル本文が、図の構造契約を満たすかを検査する。
 
 検査するのは述語であって、モデルの良し悪しではない。通ったときに言えるのは次だけである。
 
-  - 節と順序が契約と一致し、どの節も空でない
-  - 実装の節（テーブル定義・API など）が混入しない
-  - 要素一覧の全要素が、正式な定義から機械抽出した明示索引の語だけで名付けられている
-  - モデル図が集約ごとに分かれ、各集約に責務・境界の箇条書きと classDiagram があり、全要素がどこかの集約の図に現れ、
-    メソッドは公開コマンド（括弧つき）だけで、フィールドが無い。集約が2つ以上なら「集約どうしの関係」の図がある
-  - 要素一覧の全要素（ドメインイベントを除く）に詳細があり、必須項目（####）と操作ごとの契約（#### 操作:）が埋まっている
-  - 詳細にあって一覧に無い要素が無い
-  - 集約が2つ以上なら「集約どうしの協働」の表があり、手段が契約の値（識別子で参照／値として渡す／ドメインイベント／呼び手が両方を操作）に収まる
-  - 正式な定義の全BDDが対応表か「対応しないBDD」に現れ、全要素が対応表か「対応のない要素・操作」に現れる
-  - 「業務知識へ提案する概念」に契約の4列の表があるか「なし」と書かれ、提案した語は要素一覧の要素名・業務知識の語に現れず、
-    提案が引くBDD番号は正式な定義にあり、足す先の節は正式な定義の契約の節名である
-  - 未決の節が空でない（「なし」を含む）
+  - 「クラス図」の節に Mermaid classDiagram があり、「未決」の節が空でない
+  - クラス図の各クラスのラベルが、正式な定義から機械抽出した索引の語である
+  - 各クラスが契約の種別を一つだけ持つ（値オブジェクトなどに「・文脈共有」を添えてよい）。同じラベルの種別が図ごとに食い違わない
+  - コマンド（+名前(引数)）は集約ルートかエンティティにだけあり、その名前が正式な定義でコマンドとした行いである
+  - 集約ルートとエンティティはコマンド以外の行を持たない。値オブジェクトは取り得る値の行を持ってよいが、コマンドを持たない。ドメインイベントは何も持たない
+  - 関係の線が宣言済みのクラスだけを結ぶ
+  - 集約ルートごとに同じ語の H2 節があり、その集約のコマンドごとに同じ語の H3 節がその中にある
+  - 正式な定義で状態を持つとされた集約ルートの節に stateDiagram-v2 があり、状態が索引の状態で、矢印のラベルがその集約のコマンドである
+  - 本文が引くBDD番号が正式な定義にある
+  - 「業務知識への提案」の節があれば、提案した語が図のラベルに無い
 
-  verify.py --playbook <同じdirectoryのplaybook.yml> --source <domain-ruleの正式な定義の絶対path>  < <候補モデル本文（Markdown）>
+  verify.py --playbook <同じdirectoryのplaybook.yml> --source <domain-ruleの正式な定義の絶対path>  < <候補本文（Markdown）>
 
-入力は標準入力の候補本文、引数の playbook.yml、正式な定義のpathだけである。索引は同じdirectoryの source.py の build_index で
-正式な定義から毎回導き、索引fileも候補fileも受け取らない。
-
-exit 0 = 通った（stdoutに verified と warnings） / 2 = 標準入力が空、正式な定義が契約の節を持たない、または述語が成り立たない（診断は標準エラー）。
+exit 0 = 通った（stdoutに verified, source_path, warnings） / 2 = 標準入力が空、正式な定義が契約の節を持たない、または述語が成り立たない（診断は標準エラー）。
 """
 
 from __future__ import annotations
@@ -34,167 +29,224 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from source import build_index  # noqa: E402  同じdirectoryの索引器。正式な定義から検査の正解を導く
+from source import HEADING, build_index, load_yaml, strip_markup, table_rows  # noqa: E402
 
-HEADING = re.compile(r"^(#{1,6})[ ]+(.+?)[ ]*$")
-BDD_ID = re.compile(r"BDD-\d{3,}")
+BDD_REF = re.compile(r"BDD-\d{3,}")
+CLASS_DECL = re.compile(r'^class\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\["([^"]+)"\])?\s*(\{)?\s*$')
+RELATION = re.compile(r'^([A-Za-z_][A-Za-z0-9_]*)\s*(?:"[^"]*"\s*)?(<\|--|\*--|o--|-->|<--|\.\.>|<\.\.|--\*|--o|--\|>|\.\.\|>|--|\.\.)\s*(?:"[^"]*"\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*(?::.*)?$')
+STEREOTYPE = re.compile(r"^<<(.+)>>$")
+COMMAND = re.compile(r"^\+\s*([^()]+?)\s*\((.*)\)\s*$")
+TRANSITION = re.compile(r"^(\[\*\]|[^\s:]+)\s*-->\s*(\[\*\]|[^\s:]+)\s*(?::\s*(.*))?$")
 
 
-def fail(message: str) -> int:
-    print(f"[error] {message}", file=sys.stderr)
-    return 2
-
-
-def load_playbook(config_path: Path) -> dict:
-    result = subprocess.run(["yq", "-o=json", "-I=0", ".", str(config_path)],
-                            check=True, capture_output=True, text=True)
-    resolved = json.loads(result.stdout)
-    return resolved
+class Invalid(Exception):
+    pass
 
 
 def read_stdin() -> str:
     if sys.stdin.isatty():
-        raise ValueError("候補モデル本文を標準入力で渡す")
+        raise Invalid("候補本文を標準入力で渡す")
     body = sys.stdin.read()
     if not body.strip():
-        raise ValueError("標準入力が空。候補モデル本文を標準入力で渡す")
+        raise Invalid("標準入力が空。候補本文を標準入力で渡す")
     return body
 
 
-def strip_markup(text: str) -> str:
-    return re.sub(r"[*`_]", "", text).strip()
-
-
-def split_sections(body: str) -> tuple[list[str], dict[str, list[str]], list[tuple[int, str]]]:
-    """H2で節を切る。戻り値は (H2の順序, 節→行, 全見出し)。コードブロック内は見出しに数えない。"""
-    order: list[str] = []
-    content: dict[str, list[str]] = {}
-    headings: list[tuple[int, str]] = []
-    current: str | None = None
-    in_code = False
+def parse(body: str) -> tuple[list[dict], list[dict], list[str]]:
+    """H2節の並び、Mermaid図、コードブロック外の行を返す。各図とH3はどのH2の中にあるかを持つ。"""
+    h2s: list[dict] = []
+    diagrams: list[dict] = []
+    prose: list[str] = []
+    fence: list[str] | None = None
+    fence_lang = ""
     for line in body.splitlines():
+        if fence is not None:
+            if line.startswith("```"):
+                if fence_lang == "mermaid":
+                    content = [l.strip() for l in fence if l.strip() and not l.strip().startswith("%%")]
+                    kind = content[0] if content else ""
+                    diagrams.append({"kind": kind, "lines": content[1:], "h2": h2s[-1]["title"] if h2s else None})
+                fence = None
+            else:
+                fence.append(line)
+            continue
         if line.startswith("```"):
-            in_code = not in_code
-        match = None if in_code else HEADING.match(line)
-        if match:
-            level, title = len(match.group(1)), match.group(2).strip()
-            headings.append((level, title))
-            if level == 2:
-                if title in content:
-                    raise ValueError(f"節が重複している: {title}")
-                current = title
-                order.append(title)
-                content[title] = []
-                continue
-        if current is not None:
-            content[current].append(line)
-    return order, content, headings
-
-
-def tables(lines: list[str]) -> list[dict]:
-    """節内のMarkdown表を、見出し行と本文行に分けて返す。"""
-    found: list[dict] = []
-    current: dict | None = None
-    for line in lines:
-        stripped = line.strip()
-        if not stripped.startswith("|"):
-            current = None
+            fence, fence_lang = [], line[3:].strip()
             continue
-        cells = [strip_markup(part) for part in stripped.strip("|").split("|")]
-        if current is None:
-            current = {"header": cells, "rows": []}
-            found.append(current)
-            continue
-        if all(set(cell) <= set("-: ") for cell in cells):
-            continue
-        current["rows"].append(cells)
-    return found
-
-
-def element_parts(lines: list[str]) -> tuple[dict[str, str], dict[str, dict[str, str]]]:
-    """要素の詳細（### の下）を、#### 項目 → 本文 と、#### 操作: 名 → {欄: 値} に分ける。"""
-    items: dict[str, str] = {}
-    operations: dict[str, dict[str, str]] = {}
-    current: str | None = None
-    current_op: str | None = None
-    for line in lines:
+        prose.append(line)
         match = HEADING.match(line)
-        if match and len(match.group(1)) == 4:
-            title = match.group(2).strip()
-            if title.startswith("操作:") or title.startswith("操作："):
-                current_op = title.split(":", 1)[-1].split("：", 1)[-1].strip()
-                if current_op in operations:
-                    raise ValueError(f"操作が重複している: {current_op}")
-                operations[current_op] = {}
+        if not match:
+            if h2s:
+                h2s[-1]["lines"].append(line)
+            continue
+        level, title = len(match.group(1)), strip_markup(match.group(2))
+        if level == 2:
+            h2s.append({"title": title, "h3": [], "lines": []})
+        elif level == 3 and h2s:
+            h2s[-1]["h3"].append(title)
+    return h2s, diagrams, prose
+
+
+def parse_class_diagram(lines: list[str], errors: list[str]) -> tuple[dict, list[tuple[str, str]]]:
+    """classDiagram から {id: {label, body}} と関係の組を取り出す。"""
+    classes: dict[str, dict] = {}
+    relations: list[tuple[str, str]] = []
+    current: str | None = None
+    for line in lines:
+        if current is not None:
+            if line == "}":
                 current = None
             else:
-                current = title
-                current_op = None
-                if current in items:
-                    raise ValueError(f"項目が重複している: {current}")
-                items[current] = ""
+                classes[current]["body"].append(line)
             continue
-        if current_op is not None:
-            bullet = re.match(r"^\s*[-*]\s*([^:：]+)[:：]\s*(.*)$", line)
-            if bullet:
-                operations[current_op][bullet.group(1).strip()] = strip_markup(bullet.group(2))
-        elif current is not None and line.strip() and not line.strip().startswith("<!--"):
-            items[current] = (items[current] + " " + strip_markup(line)).strip()
-    return items, operations
-
-
-CLASS_LABEL = re.compile(r'^\s*class\s+[A-Za-z_][A-Za-z0-9_]*\s*\[\"(.+?)\"\]')
-
-
-def class_diagram(lines: list[str]) -> tuple[list[str], list[str]]:
-    """classDiagram の class ラベル一覧と、フィールド・ゲッターと見なす行を返す。"""
-    labels: list[str] = []
-    fields: list[str] = []
-    in_block = False
-    in_class = False
-    for line in lines:
-        if line.startswith("```"):
-            in_block = not in_block
+        declared = CLASS_DECL.match(line)
+        if declared:
+            class_id, label, opens = declared.groups()
+            if class_id in classes:
+                errors.append(f"クラス図で同じidのクラスを2度宣言している: {class_id}")
+            classes[class_id] = {"label": label or class_id, "body": []}
+            current = class_id if opens else None
             continue
-        if not in_block:
+        related = RELATION.match(line)
+        if related:
+            relations.append((related.group(1), related.group(3)))
             continue
-        match = CLASS_LABEL.match(line)
-        if match:
-            labels.append(match.group(1))
-            in_class = line.rstrip().endswith("{")
+        errors.append(f"クラス図の行を読めない（class 宣言、関係の線、クラスの中身のどれでもない）: {line}")
+    if current is not None:
+        errors.append(f"クラス図のクラスが閉じていない: {current}")
+    return classes, relations
+
+
+def check(body: str, index: dict, contract: dict) -> list[str]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    h2s, diagrams, prose = parse(body)
+    titles = [h2["title"] for h2 in h2s]
+    vocabulary = set(index["vocabulary"])
+    commands_in_source = set(index["commands"])
+    kinds = contract["element_kinds"]
+    holders = set(contract["command_holders"])
+    shared = contract["shared_mark"]
+
+    class_section = contract["class_diagram_section"]
+    if not any(d["kind"] == "classDiagram" and d["h2"] == class_section for d in diagrams):
+        errors.append(f"「## {class_section}」の節に Mermaid classDiagram が無い")
+    open_section = contract["open_questions_section"]
+    open_h2 = next((h2 for h2 in h2s if h2["title"] == open_section), None)
+    if open_h2 is None or not any(line.strip() for line in open_h2["lines"]):
+        errors.append(f"「## {open_section}」の節が無いか空である（0件なら「なし」と書く）")
+
+    # ── クラス図 ──
+    kind_of: dict[str, str] = {}
+    commands_of: dict[str, list[str]] = {}
+    for diagram in (d for d in diagrams if d["kind"] == "classDiagram"):
+        classes, relations = parse_class_diagram(diagram["lines"], errors)
+        for source_id, target_id in relations:
+            for end in (source_id, target_id):
+                if end not in classes:
+                    errors.append(f"クラス図の関係の線が宣言の無いクラスを結んでいる: {end}")
+        for class_id, cls in classes.items():
+            label = cls["label"]
+            if label not in vocabulary:
+                errors.append(f"クラス「{label}」は正式な定義の索引に無い語である。要素にせず「{contract['proposal_section']}」へ移す")
+            stereotypes = [m.group(1) for m in (STEREOTYPE.match(l) for l in cls["body"]) if m]
+            if len(stereotypes) != 1:
+                errors.append(f"クラス「{label}」は種別（<<…>>）をちょうど1つ持たない")
+                continue
+            kind, _, mark = stereotypes[0].partition("・")
+            if kind not in kinds or (mark and mark != shared):
+                errors.append(f"クラス「{label}」の種別「{stereotypes[0]}」は契約に無い（{'／'.join(kinds)}、印は「・{shared}」だけ）")
+                continue
+            if label in kind_of and kind_of[label] != kind:
+                errors.append(f"クラス「{label}」の種別が図によって違う: {kind_of[label]} と {kind}")
+            kind_of[label] = kind
+            own_commands = commands_of.setdefault(label, [])
+            for line in cls["body"]:
+                if STEREOTYPE.match(line):
+                    continue
+                command = COMMAND.match(line)
+                if kind in holders:
+                    if not command:
+                        errors.append(f"クラス「{label}」（{kind}）にコマンド以外の行がある: {line}。フィールドや判定だけの操作は描かない")
+                        continue
+                    name = command.group(1).strip()
+                    if name not in commands_in_source:
+                        errors.append(f"クラス「{label}」のコマンド「{name}」は、正式な定義の「コマンドとクエリ」でコマンドとした行いに無い")
+                    if name not in own_commands:
+                        own_commands.append(name)
+                elif kind == "値オブジェクト":
+                    if "(" in line or ")" in line:
+                        errors.append(f"値オブジェクト「{label}」に操作がある: {line}。コマンドは集約ルートかエンティティにだけ描く")
+                else:
+                    errors.append(f"ドメインイベント「{label}」に中身の行がある: {line}")
+
+    # ── 集約ごとの節、コマンドの節、状態遷移図 ──
+    h2_by_title = {h2["title"]: h2 for h2 in h2s}
+    aggregate_sections = set()
+    for label, kind in kind_of.items():
+        if kind != "集約ルート":
             continue
-        stripped = line.strip()
-        if stripped == "}":
-            in_class = False
+        aggregate_sections.add(label)
+        h2 = h2_by_title.get(label)
+        if h2 is None:
+            errors.append(f"集約ルート「{label}」の「## {label}」節が無い")
             continue
-        if in_class and stripped and not stripped.startswith("<<"):
-            if not (stripped.startswith("+") and "(" in stripped):
-                fields.append(stripped)
-    return labels, fields
+        for name in commands_of.get(label, []):
+            if name not in h2["h3"]:
+                errors.append(f"集約「{label}」のコマンド「{name}」の「### {name}」節が「## {label}」の中に無い")
+        state_diagrams = [d for d in diagrams if d["kind"] == "stateDiagram-v2" and d["h2"] == label]
+        if label in index["state_holders"] and not state_diagrams:
+            errors.append(f"正式な定義で状態を持つ「{label}」の節に stateDiagram-v2 が無い")
+        for diagram in state_diagrams:
+            for line in diagram["lines"]:
+                transition = TRANSITION.match(line)
+                if not transition:
+                    errors.append(f"「{label}」の状態遷移図の行を読めない（「状態 --> 状態: コマンド」の形だけを書く）: {line}")
+                    continue
+                source_state, target_state, command = transition.groups()
+                for state in (source_state, target_state):
+                    if state != "[*]" and state not in index["states"]:
+                        errors.append(f"「{label}」の状態遷移図の状態「{state}」は正式な定義の状態に無い")
+                if target_state == "[*]" and not command:
+                    continue
+                if not command or command.strip() not in commands_of.get(label, []):
+                    errors.append(f"「{label}」の状態遷移図の矢印「{line}」のラベルが、クラス図でこの集約に描いたコマンドではない")
+    entity_commands = [(label, name) for label, kind in kind_of.items() if kind == "エンティティ" for name in commands_of.get(label, [])]
+    for label, name in entity_commands:
+        if not any(name in h2_by_title[t]["h3"] for t in aggregate_sections if t in h2_by_title):
+            errors.append(f"エンティティ「{label}」のコマンド「{name}」の「### {name}」節が、どの集約の節にも無い")
+    stray = [d for d in diagrams if d["kind"] == "stateDiagram-v2" and d["h2"] not in aggregate_sections]
+    for diagram in stray:
+        errors.append(f"状態遷移図が集約ルートの節の外（「## {diagram['h2']}」）にある")
 
+    # ── BDD番号 ──
+    cited = []
+    for line in prose:
+        for ref in BDD_REF.findall(line):
+            if ref not in cited:
+                cited.append(ref)
+    unknown = [ref for ref in cited if ref not in index["bdd"]]
+    if unknown:
+        errors.append("本文が引くBDD番号が正式な定義に無い: " + ", ".join(unknown))
+    uncited = [ref for ref in index["bdd"] if ref not in cited]
+    if uncited:
+        warnings.append("本文が引いていない正式な定義のBDD（集約の外で成立するものか、要素の不足かを読み返す）: " + ", ".join(uncited))
 
-def subsections(lines: list[str]) -> dict[str, list[str]]:
-    """節内のH3ごとに行を分ける。"""
-    result: dict[str, list[str]] = {}
-    current: str | None = None
-    for line in lines:
-        match = HEADING.match(line)
-        if match and len(match.group(1)) == 3:
-            current = match.group(2).strip()
-            if current in result:
-                raise ValueError(f"小見出しが重複している: {current}")
-            result[current] = []
-        elif current is not None:
-            result[current].append(line)
-    return result
+    # ── 業務知識への提案 ──
+    proposal = h2_by_title.get(contract["proposal_section"])
+    if proposal is not None:
+        proposed = [row[0] for row in table_rows(proposal["lines"])]
+        if not proposed:
+            errors.append(f"「## {contract['proposal_section']}」に表が無い。提案が無ければ見出しごと置かない")
+        for word in proposed:
+            if word in kind_of:
+                errors.append(f"業務知識への提案の語「{word}」が図のクラスにある。提案した語は図に使わない")
+            if word in vocabulary:
+                warnings.append(f"業務知識への提案「{word}」は正式な定義の索引に既にある")
 
-
-def nonempty(lines: list[str]) -> bool:
-    return any(line.strip() and not line.strip().startswith("<!--") for line in lines)
-
-
-def names_in(cell: str) -> list[str]:
-    return [part.strip() for part in re.split(r"[、,／/]", cell) if part.strip()]
+    if titles.count(class_section) != 1:
+        errors.append(f"「## {class_section}」の節がちょうど1つではない")
+    return errors, warnings
 
 
 def main() -> int:
@@ -202,242 +254,18 @@ def main() -> int:
     parser.add_argument("--playbook", required=True)
     parser.add_argument("--source", required=True)
     args = parser.parse_args()
-    warnings: list[str] = []
     try:
-        playbook = load_playbook(Path(args.playbook))
-        contract = playbook["contract"]
-        expected = list(contract["model_sections"])
-        kinds = set(contract["element_kinds"])
-        exceptional = set(contract["exceptional_kinds"])
-        items = list(contract["element_items"])
-        op_fields = list(contract["operation_fields"])
-        forbidden = set(contract["forbidden_sections"])
-
-        index = build_index(Path(args.playbook), args.source)
-        vocabulary = set(index["vocabulary"])
         body = read_stdin()
-
-        order, content, headings = split_sections(body)
-        mixed = [title for _, title in headings if title in forbidden]
-        if mixed:
-            raise ValueError("実装の節が混入している: " + ", ".join(mixed))
-        if order != expected:
-            raise ValueError("節と順序が契約に一致しない。期待: " + " / ".join(expected)
-                             + " 実際: " + " / ".join(order))
-        empty = [title for title in expected if not nonempty(content[title])]
-        if empty:
-            raise ValueError("空の節がある: " + ", ".join(empty))
-
-        # 業務知識へ提案する概念（要素一覧より先に読み、提案した語が要素に混ざっていないかを要素一覧の走査で見る）
-        # Deterministic validation declaration:
-        # source=contract.proposal_columns, contract.source_sections (正式な定義の見出し), and the BDD ids indexed from the domain-rule path;
-        # input=the 「業務知識へ提案する概念」 section (table rows or the literal 「なし」) and the 要素一覧 table;
-        # normalization=strip markup, split 「足す先」 and 「要素の語」 cells on 、,／/, BDD regex extraction;
-        # predicate=(a) section has the 4-column table with no blank cell, or is 「なし」; (b) no proposed concept equals an
-        # element name or a 業務知識の語 cell of 要素一覧; (c) every BDD id cited by a proposal exists in the index; (d) every 足す先
-        # is a source section heading; diagnostic=the proposal and the offending word/id/section; positive=会議室 proposed and
-        # absent from 要素一覧; negative=会議室 proposed and also listed as an element; boundary=「なし」 passes, a proposal whose
-        # name is already in the index passes with a neutral warning. Whether the proposal is necessary is semantic.
-        proposal_columns = list(contract["proposal_columns"])
-        source_headings = set(contract["source_sections"].values())
-        proposal_lines = content["業務知識へ提案する概念"]
-        proposal_tables = [table for table in tables(proposal_lines) if table["header"] == proposal_columns]
-        proposals: dict[str, dict] = {}
-        if proposal_tables and proposal_tables[0]["rows"]:
-            for row in proposal_tables[0]["rows"]:
-                if len(row) != len(proposal_columns) or not all(row):
-                    raise ValueError("業務知識へ提案する概念の行に空欄がある: " + " | ".join(row))
-                concept = row[0]
-                if concept in proposals:
-                    raise ValueError("業務知識へ提案する概念に同じ概念が2度ある: " + concept)
-                unknown_ids = sorted(bdd for bdd in BDD_ID.findall(row[2]) if bdd not in set(index["bdd"]))
-                if unknown_ids:
-                    raise ValueError(f"業務知識へ提案する概念「{concept}」が引くBDD番号が正式な定義に無い: " + ", ".join(unknown_ids))
-                targets = names_in(row[3])
-                bad_targets = [target for target in targets if target not in source_headings]
-                if not targets or bad_targets:
-                    raise ValueError(f"業務知識へ提案する概念「{concept}」の足す先が正式な定義の節名ではない: " + ", ".join(bad_targets or [row[3]])
-                                     + "（許す値: " + "／".join(contract["source_sections"].values()) + "）")
-                if concept in vocabulary:
-                    warnings.append(f"業務知識へ提案する概念「{concept}」は正式な定義の索引に既にある。提案が節の追加なのか、要素にすべき語なのかを同じagentが読み返す")
-                proposals[concept] = {"targets": targets}
-        else:
-            literal_none = [line.strip() for line in proposal_lines if line.strip() and not line.strip().startswith("<!--")]
-            if literal_none != ["なし"]:
-                raise ValueError("業務知識へ提案する概念に「" + " | ".join(proposal_columns) + "」の表が無い。0件なら「なし」とだけ書く")
-
-        # 要素一覧
-        element_columns = list(contract["element_columns"])
-        listing = [table for table in tables(content["要素一覧"]) if table["header"] == element_columns]
-        if not listing or not listing[0]["rows"]:
-            raise ValueError("要素一覧に「" + " | ".join(element_columns) + "」の表が無いか空である")
-        elements: dict[str, dict] = {}
-        for row in listing[0]["rows"]:
-            if len(row) != len(element_columns) or not all(row):
-                raise ValueError("要素一覧の行に空欄がある: " + " | ".join(row))
-            name, kind, term, purpose = row[0], row[1], row[2], row[3]
-            if name in elements:
-                raise ValueError("要素一覧に同じ要素が2度ある: " + name)
-            mixed_proposal = sorted({word for word in [name] + names_in(term) if word in proposals})
-            if mixed_proposal:
-                raise ValueError(f"業務知識へ提案する概念の語が要素一覧に混ざっている: {', '.join(mixed_proposal)}（要素「{name}」）。提案した語は要素にせず、正式な定義へ足してから要素にする")
-            if not any(kind.startswith(allowed) for allowed in kinds):
-                raise ValueError(f"要素「{name}」の種別が契約の外: {kind}")
-            if any(kind.startswith(ex) for ex in exceptional):
-                warnings.append(f"例外扱いの種別を使っている: {name}（{kind}）。捨てた割り当てに理由があるか読む")
-            # Deterministic validation declaration:
-            # source=index built by source.py from the domain-rule path; input=element name and source-term cells;
-            # normalization=split comma/slash-separated source terms and strip markup;
-            # predicate=every resulting word is an exact member of index.vocabulary;
-            # diagnostic=the element and first absent word; positive=利用枠;
-            # negative=用紙ロット; boundary=会議室 appears in prose but not the
-            # explicit index and therefore fails. Semantic suitability is not scored.
-            for word in {name} | set(names_in(term)):
-                if word not in vocabulary:
-                    raise ValueError(
-                        f"要素「{name}」の語「{word}」が索引に無い。"
-                        "要素名と業務知識の語は明示索引から選ぶ"
-                    )
-            elements[name] = {"kind": kind, "term": term}
-
-        # 各要素の詳細
-        details = subsections(content["各要素の詳細"])
-        needs_detail = [name for name, info in elements.items() if not info["kind"].startswith("ドメインイベント")]
-        missing_detail = [name for name in needs_detail if name not in details]
-        if missing_detail:
-            raise ValueError("要素一覧にあって詳細が無い要素: " + ", ".join(missing_detail))
-        extra_detail = [name for name in details if name not in elements]
-        if extra_detail:
-            raise ValueError("詳細にあって要素一覧に無い要素: " + ", ".join(extra_detail))
-        for name in needs_detail:
-            items_found, operations = element_parts(details[name])
-            lacking = [item for item in items if not items_found.get(item)]
-            if lacking:
-                raise ValueError(f"要素「{name}」の必須項目（####）が無いか空: " + ", ".join(lacking))
-            unknown_items = [h for h in items_found if h not in items]
-            if unknown_items:
-                raise ValueError(f"要素「{name}」に契約に無い項目がある: " + ", ".join(unknown_items))
-            if not operations:
-                raise ValueError(f"要素「{name}」に「#### 操作: <操作名>」が1つも無い")
-            for op_name, fields in operations.items():
-                lacking_fields = [f for f in op_fields if not fields.get(f)]
-                if lacking_fields:
-                    raise ValueError(f"要素「{name}」の操作「{op_name}」に空欄がある: " + ", ".join(lacking_fields) + "。契約の各欄を埋めるか「なし」と書く")
-
-        # モデル図: 集約ごとに1枚。責務・境界の箇条書きと classDiagram。集約が2つ以上なら「集約どうしの関係」
-        boundary_tables = [table for table in tables(content["集約の境界"]) if table["header"][:2] == ["集約", "ルート"]]
-        if not boundary_tables or not boundary_tables[0]["rows"]:
-            raise ValueError("集約の境界に「集約 | ルート | …」の表が無いか空である")
-        aggregates = [row[0] for row in boundary_tables[0]["rows"] if row and row[0]]
-        diagram_sections = subsections(content["モデル図"])
-        aggregate_sections = {title[len("集約:"):].strip(): body for title, body in diagram_sections.items()
-                              if title.startswith("集約:") or title.startswith("集約：")}
-        aggregate_sections = {(k if not k.startswith("：") else k[1:]).strip(): v for k, v in aggregate_sections.items()}
-        missing_diagram = [name for name in aggregates if name not in aggregate_sections]
-        if missing_diagram:
-            raise ValueError("集約の境界にあってモデル図に「### 集約: <名>」が無い集約: " + ", ".join(missing_diagram))
-        extra_diagram = [name for name in aggregate_sections if name not in aggregates]
-        if extra_diagram:
-            raise ValueError("モデル図にあって集約の境界に無い集約: " + ", ".join(extra_diagram))
-        all_labels: set[str] = set()
-        for name, body in aggregate_sections.items():
-            bullets = {}
-            for line in body:
-                bullet = re.match(r"^\s*[-*]\s*([^:：]+)[:：]\s*(.*)$", line)
-                if bullet:
-                    bullets[bullet.group(1).strip()] = bullet.group(2).strip()
-            for key in ("責務", "境界"):
-                if not bullets.get(key):
-                    raise ValueError(f"集約「{name}」のモデル図に「- {key}:」が無いか空")
-            labels, fields_found = class_diagram(body)
-            if not labels:
-                raise ValueError(f"集約「{name}」のモデル図に classDiagram の class が無い")
-            if name not in labels:
-                raise ValueError(f"集約「{name}」のモデル図にルート「{name}」のクラスが無い")
-            if fields_found:
-                raise ValueError(f"集約「{name}」のモデル図にフィールドかゲッターがある（メソッドは括弧つきの公開コマンドだけ）: " + ", ".join(fields_found))
-            unknown = [label for label in labels if label not in elements]
-            if unknown:
-                raise ValueError(f"集約「{name}」のモデル図にあって要素一覧に無いクラス: " + ", ".join(unknown))
-            all_labels.update(labels)
-        missing_class = [name for name in elements if name not in all_labels]
-        if missing_class:
-            raise ValueError("要素一覧にあってどの集約のモデル図にも無い要素: " + ", ".join(missing_class))
-        # 集約どうしの協働（集約の境界の小節）
-        boundary_subs = subsections(content["集約の境界"])
-        collab = boundary_subs.get("集約どうしの協働")
-        if collab is None:
-            raise ValueError("集約の境界に「### 集約どうしの協働」が無い")
-        collab_tables = [table for table in tables(collab) if len(table["header"]) > 1 and table["header"][1] == "手段"]
-        if len(aggregates) >= 2:
-            if not collab_tables or not collab_tables[0]["rows"]:
-                raise ValueError("集約が2つ以上あるのに「集約どうしの協働」の表が無いか空")
-            means = set(contract["collaboration_means"])
-            for row in collab_tables[0]["rows"]:
-                if len(row) < 4 or not all(row[:4]):
-                    raise ValueError("集約どうしの協働の行に空欄がある: " + " | ".join(row))
-                if row[1] not in means:
-                    raise ValueError(f"集約どうしの協働の手段が契約の外: {row[1]}（許す値: {'／'.join(sorted(means))}）")
-        elif not nonempty(collab):
-            raise ValueError("集約が1つなら「集約どうしの協働」に「なし」と書く")
-
-        relation = diagram_sections.get("集約どうしの関係")
-        if len(aggregates) >= 2:
-            if relation is None:
-                raise ValueError("集約が2つ以上あるのに「### 集約どうしの関係」が無い")
-            rel_labels, _ = class_diagram(relation)
-            missing_rel = [name for name in aggregates if name not in rel_labels]
-            if missing_rel:
-                raise ValueError("「集約どうしの関係」に無い集約: " + ", ".join(missing_rel))
-        elif relation is not None:
-            raise ValueError("集約が1つなのに「### 集約どうしの関係」がある")
-
-        # Deterministic validation declaration:
-        # source=source index BDD ids and candidate element list;
-        # input=the mapping table plus explicit non-mapping declarations;
-        # normalization=BDD regex extraction and comma/slash-separated names;
-        # predicate=every source BDD and every detailed element is either mapped
-        # or explicitly declared unmapped; diagnostic=missing/unknown identifiers;
-        # positive=all mapped; negative=undeclared BDD; boundary=explicitly
-        # unmapped passes with a neutral warning. Necessity/adequacy is semantic.
-        # BDDとの対応
-        mapping_lines = content["BDDとの対応"]
-        mapping_tables = [table for table in tables(mapping_lines) if table["header"][:1] == ["BDD"]]
-        if not mapping_tables:
-            raise ValueError("BDDとの対応に「BDD | 要素 | 操作 | …」の表が無い")
-        covered_bdd: set[str] = set()
-        covered_elements: set[str] = set()
-        for row in mapping_tables[0]["rows"]:
-            covered_bdd.update(BDD_ID.findall(row[0]))
-            if len(row) > 1:
-                covered_elements.update(names_in(row[1]))
-        unmapped_line = next((line for line in mapping_lines if line.strip().startswith("- 対応しないBDD:")), None)
-        unused_line = next((line for line in mapping_lines if line.strip().startswith("- 対応のない要素・操作:")), None)
-        if unmapped_line is None or unused_line is None:
-            raise ValueError("BDDとの対応に「- 対応しないBDD:」と「- 対応のない要素・操作:」の行が要る")
-        declared_unmapped = set(BDD_ID.findall(unmapped_line))
-        missing_bdd = [bdd for bdd in index["bdd"] if bdd not in covered_bdd and bdd not in declared_unmapped]
-        if missing_bdd:
-            raise ValueError("正式な定義のBDDが対応表にも「対応しないBDD」にも無い: " + ", ".join(missing_bdd))
-        unknown_bdd = sorted(bdd for bdd in covered_bdd if bdd not in set(index["bdd"]))
-        if unknown_bdd:
-            raise ValueError("正式な定義に無いBDD番号が対応表にある: " + ", ".join(unknown_bdd))
-        declared_unused = names_in(unused_line.split(":", 1)[1])
-        unused = [name for name in needs_detail if name not in covered_elements and name not in declared_unused]
-        if unused:
-            raise ValueError("対応表にも「対応のない要素・操作」にも記載が無い要素: " + ", ".join(unused))
-        if declared_unmapped:
-            warnings.append("対応しないと明示されたBDDがある: " + ", ".join(sorted(declared_unmapped))
-                            + "。必要性と対応方針は同じagentが正式な定義と候補を読んで判断する")
-        if declared_unused and declared_unused != ["なし"]:
-            warnings.append("対応がないと明示された要素・操作がある: " + ", ".join(declared_unused)
-                            + "。必要性と対応方針は同じagentが正式な定義と候補を読んで判断する")
-
-        # 未決
-        if not nonempty(content["未決"]):
-            raise ValueError("未決の節が空。0件なら「なし」と書く")
-    except (KeyError, OSError, UnicodeDecodeError, ValueError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
-        return fail(str(exc))
+        contract = load_yaml(Path(args.playbook))["contract"]
+        index = build_index(Path(args.playbook), args.source)
+    except (Invalid, KeyError, OSError, UnicodeDecodeError, ValueError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        print(f"[error] {exc}", file=sys.stderr)
+        return 2
+    errors, warnings = check(body, index, contract)
+    if errors:
+        for message in errors:
+            print(f"[error] {message}", file=sys.stderr)
+        return 2
     print(json.dumps({"verified": True, "source_path": index["source_path"], "warnings": warnings}, ensure_ascii=False))
     return 0
 
