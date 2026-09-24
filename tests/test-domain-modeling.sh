@@ -11,7 +11,6 @@ TMP=$(mktemp -d "${TMPDIR:-/tmp}/domain-modeling-test.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
 PB="$ROOT/plugins/domain-modeling/skills/model-domain"
 FIX="$ROOT/tests/fixtures/library-lending"
-TEMPLATE="$ROOT/../write-doc-plugins/plugins/write-doc/skills/write-doc/assets/templates/domain-model.md"
 PASS=0
 FAIL=0
 
@@ -61,8 +60,8 @@ source_index "fixtures/rule.md" >/dev/null 2>&1 && ng "relative source should fa
 source_index "$TMP/missing.md" >/dev/null 2>&1 && ng "missing source should fail" || ok "missing source is rejected"
 
 # ── 検査（verify.py） ─────────────────────────────────────────────
-[ -f "$TEMPLATE" ] && grep -qF '<<値オブジェクト・文脈共有>>' "$TEMPLATE" && grep -qF '## クラス図' "$TEMPLATE" && grep -qF '## 業務知識への提案' "$TEMPLATE" && grep -qF '## 未決' "$TEMPLATE" \
-  && ok "write-doc domain-model template declares the notation the script parses" || ng "write-doc domain-model template does not match the contract"
+# 記法の正本は write-doc の domain-model 型の template である。この試験は template を読まない（別 repository の版に合否を依らせない）。
+# 正例の fixture は write-doc の見本と同じ本文で、template との一致は意味評価で確かめる。
 expect_ok "$FIX/domain-model.md" "library example passes"
 jq -e '.verified==true and (.source_path|endswith("rule.md")) and (.warnings|type=="array")' "$TMP/out" >/dev/null && ok "verify returns verified, source_path, warnings" || ng "verify output shape"
 
@@ -96,6 +95,9 @@ expect_error "ドメインイベント「本が貸し出された」に中身の
 # 境界例: 取り得る値が限られる値オブジェクトは値の行を持ってよい
 mutate "$TMP/b1.md" $'<<値オブジェクト>>\n    }\n    class Standing' $'<<値オブジェクト>>\n        14日後\n    }\n    class Standing'
 expect_ok "$TMP/b1.md" "value object may list its possible values"
+# 反例: コマンドの引数が図のクラスに無い（業務知識の語でない「日付」）
+mutate "$TMP/m21.md" '+延滞にする(判定日)' '+延滞にする(日付)'
+expect_error "引数「日付」が、同じ図のクラスのラベルに無い" "$TMP/m21.md"
 # 反例: 関係の線が宣言の無いクラスを結ぶ
 mutate "$TMP/m9.md" '    Loan *-- Due' $'    Loan *-- Due\n    Loan *-- Ghost'
 expect_error "宣言の無いクラスを結んでいる: Ghost" "$TMP/m9.md"
@@ -159,6 +161,8 @@ expect_error "提案ごとの ### 見出しが無い" "$TMP/m20.md"
 # 境界例: 業務の決まりが薄い文脈（会員の住所録）は、クラス図と未決だけで通る
 python3 "$PB/scripts/verify.py" --playbook "$PB/playbook.yml" --source "$ROOT/tests/fixtures/member-directory/domain-rule.md" < "$ROOT/tests/fixtures/member-directory/domain-model.md" >/dev/null 2>"$TMP/err" \
   && ok "thin CRUD context passes with only a class diagram and open questions" || ng "thin CRUD context: $(head -3 "$TMP/err")"
+python3 "$PB/scripts/verify.py" --playbook "$PB/playbook.yml" --source "$ROOT/tests/fixtures/member-directory/domain-rule.md" < "$ROOT/tests/fixtures/member-directory/domain-model.md" 2>/dev/null | jq -e '.warnings == []' >/dev/null \
+  && ok "thin context without aggregate sections gets no uncited-BDD warning" || ng "thin context warnings"
 # 反例: 未決が空
 python3 - "$FIX/domain-model.md" "$TMP/m17.md" <<'PY'
 import sys, re
