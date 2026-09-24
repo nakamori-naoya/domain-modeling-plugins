@@ -2,7 +2,7 @@
 # model-domain が所有する script（source.py / verify.py）を、正例・反例・境界例で実行する。
 # 基準資料: playbook.yml の contract と、domain-ruleの正式な定義（fixtures/library-lending/domain-rule.md）。
 # 入力: 正式な定義のpath（source.py）、正式な定義のpath＋標準入力の候補本文（verify.py）。
-# 正例: fixtures/library-lending/domain-model.md。反例と境界例は正例を1か所ずつ変えて作る。
+# 正例: fixtures/library-lending/domain-model.md。業務の決まりが薄い境界例: fixtures/member-directory。反例と境界例は正例を1か所ずつ変えて作る。
 # 検査するのは構造の述語であって、モデルの良し悪しではない。
 set -uo pipefail
 
@@ -101,10 +101,18 @@ mutate "$TMP/m9.md" '    Loan *-- Due' $'    Loan *-- Due\n    Loan *-- Ghost'
 expect_error "宣言の無いクラスを結んでいる: Ghost" "$TMP/m9.md"
 # 反例: 集約ルートの節が無い
 mutate "$TMP/m10.md" $'\n## 貸出\n' $'\n## 貸出のこと\n'
-expect_error "集約ルート「貸出」の「## 貸出」節が無い" "$TMP/m10.md"
-# 反例: コマンドの節が無い
-mutate "$TMP/m11.md" '### 延滞にする' '### 延滞'
-expect_error "コマンド「延滞にする」の「### 延滞にする」節" "$TMP/m11.md"
+expect_error "正式な定義で状態を持つ「貸出」の「## 貸出」節が無い" "$TMP/m10.md"
+# 反例: 集約の節に、決まった節でもコマンドでもない見出しを立てる（値オブジェクトごとの説明が増える形）
+mutate "$TMP/m11.md" '### 取り違えやすいもの' $'### 貸出状況\n\n借りている冊数と延滞の有無を持つ。\n\n### 取り違えやすいもの'
+expect_error "「### 貸出状況」は" "$TMP/m11.md"
+# 境界例: コマンドの節は求めない（書くことが無いコマンドの節を消しても通る）
+python3 - "$FIX/domain-model.md" "$TMP/b4.md" <<'PY2'
+import sys, re
+t = open(sys.argv[1], encoding="utf-8").read()
+t = re.sub(r"### 本を返す\n.*?(?=### 延滞にする)", "", t, flags=re.S)
+open(sys.argv[2], "w", encoding="utf-8").write(t)
+PY2
+expect_ok "$TMP/b4.md" "a command without its own section passes"
 # 反例: 状態を持つ集約に状態遷移図が無い
 python3 - "$FIX/domain-model.md" "$TMP/m12.md" <<'PY'
 import sys, re
@@ -122,13 +130,15 @@ expect_error "ラベルが、クラス図でこの集約に描いたコマンド
 # 境界例: 終端への矢印はラベル無しでよい
 expect_ok "$FIX/domain-model.md" "unlabeled transition to [*] passes"
 # 反例: 正式な定義に無いBDD番号
-mutate "$TMP/m15.md" 'BDD-010、BDD-011、BDD-012' 'BDD-010、BDD-011、BDD-099'
+mutate "$TMP/m15.md" '（BDD-010〜012）' '（BDD-099）'
 expect_error "本文が引くBDD番号が正式な定義に無い: BDD-099" "$TMP/m15.md"
+# 境界例: 「BDD-001〜006」は範囲として引いたことになる
+verify "$FIX/domain-model.md" 2>/dev/null | jq -e '.warnings == []' >/dev/null && ok "BDD ranges count as cited" || ng "BDD range citation"
 # 境界例: 引かないBDDは失敗ではなく warning
-mutate "$TMP/b2.md" '（BDD-006）' ''
-verify "$TMP/b2.md" 2>/dev/null | jq -e '.warnings | any(contains("BDD-006"))' >/dev/null && ok "uncited BDD is a warning" || ng "uncited BDD warning"
+mutate "$TMP/b2.md" '（BDD-005、BDD-013）' '（BDD-005）'
+verify "$TMP/b2.md" 2>/dev/null | jq -e '.warnings | any(contains("BDD-013"))' >/dev/null && ok "uncited BDD is a warning" || ng "uncited BDD warning"
 # 反例: 提案した語を図に使う
-mutate "$TMP/m16.md" '| 貸出番号 |' '| 返却期限 |'
+mutate "$TMP/m16.md" '### 貸出番号' '### 返却期限'
 expect_error "業務知識への提案の語「返却期限」が図のクラスにある" "$TMP/m16.md"
 # 境界例: 提案が無ければ節ごと置かない
 python3 - "$FIX/domain-model.md" "$TMP/b3.md" <<'PY'
@@ -138,6 +148,17 @@ t = re.sub(r"## 業務知識への提案\n.*?(?=## 未決)", "", t, flags=re.S)
 open(sys.argv[2], "w", encoding="utf-8").write(t)
 PY
 expect_ok "$TMP/b3.md" "no proposal section passes"
+# 反例: 提案の節が表だけで、提案ごとの見出しが無い
+python3 - "$FIX/domain-model.md" "$TMP/m20.md" <<'PY2'
+import sys, re
+t = open(sys.argv[1], encoding="utf-8").read()
+t = re.sub(r"(## 業務知識への提案\n).*?(?=## 未決)", r"\1\n| 提案 | なぜ要るか |\n|---|---|\n| 貸出番号 | 見分けられない |\n\n", t, flags=re.S)
+open(sys.argv[2], "w", encoding="utf-8").write(t)
+PY2
+expect_error "提案ごとの ### 見出しが無い" "$TMP/m20.md"
+# 境界例: 業務の決まりが薄い文脈（会員の住所録）は、クラス図と未決だけで通る
+python3 "$PB/scripts/verify.py" --playbook "$PB/playbook.yml" --source "$ROOT/tests/fixtures/member-directory/domain-rule.md" < "$ROOT/tests/fixtures/member-directory/domain-model.md" >/dev/null 2>"$TMP/err" \
+  && ok "thin CRUD context passes with only a class diagram and open questions" || ng "thin CRUD context: $(head -3 "$TMP/err")"
 # 反例: 未決が空
 python3 - "$FIX/domain-model.md" "$TMP/m17.md" <<'PY'
 import sys, re
