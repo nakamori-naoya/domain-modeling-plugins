@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""domain-ruleの正式な定義から、図に使ってよい語の索引を機械的に抜き出し、標準出力へJSONで返す。
+"""domain-rule資料から、図に使ってよい語の索引を機械的に抜き出し、標準出力へJSONで返す。
 
 基準資料: write-doc の公開契約が domain-rule について宣言した目印と、同じdirectoryの playbook.yml の contract。
   読むのは、ユビキタス言語の表（見出し行が contract.vocabulary_table の表）、title を付けた stateDiagram-v2 の Mermaid ブロック、
   `### [BDD-<番号>]` の見出しだけで、見出しの名前は読まない。意味の判断はしない。
-索引はfileへ書かない。verify.py は同じ build_index を呼び、正式な定義のpathから毎回同じ索引を導く。
+索引はfileへ書かない。verify.py は同じ build_index を呼び、domain-rule資料のpathから毎回同じ索引を導く。
 
-  source.py --playbook <同じdirectoryのplaybook.yml> --source <domain-ruleの正式な定義の絶対path>
+  source.py --playbook <同じdirectoryのplaybook.yml> --source <domain-rule資料の絶対path>
 
-exit 0 = 索引を標準出力へ返した / 2 = 正式な定義が目印を持たない、または読めない（診断は標準エラー）。
+exit 0 = 索引を標準出力へ返した / 2 = domain-rule資料が目印を持たない、または読めない（診断は標準エラー）。
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ def vocabulary_rows(prose: list[str], header: list[str]) -> list[dict[str, str]]
             continue
         index += 1
     if len(found) != 1:
-        raise ValueError(f"正式な定義に、見出し行が「| {' | '.join(header)} |」のユビキタス言語の表が{len(found)}個ある（1個必要）")
+        raise ValueError(f"domain-rule資料に、見出し行が「| {' | '.join(header)} |」のユビキタス言語の表が{len(found)}個ある（1個必要）")
     return found[0]
 
 
@@ -122,11 +122,11 @@ def unique(words: list[str]) -> list[str]:
 
 
 def build_index(playbook_path: Path, source_raw: str) -> dict:
-    """playbook.yml の contract と正式な定義のpathから索引を組み立てる。正式な定義が目印を持たなければ ValueError。"""
+    """playbook.yml の contract とdomain-rule資料のpathから索引を組み立てる。domain-rule資料が目印を持たなければ ValueError。"""
     contract = load_yaml(playbook_path)["contract"]
     header = contract["vocabulary_table"]
     kinds = contract["vocabulary_kinds"]
-    source = regular_file(source_raw, "正式な定義")
+    source = regular_file(source_raw, "domain-rule資料")
     prose, blocks = scan(source.read_text(encoding="utf-8"))
 
     index: dict = {role: [] for role in kinds}
@@ -157,7 +157,7 @@ def build_index(playbook_path: Path, source_raw: str) -> dict:
     labels = {"terms": f"種類が「{kinds['terms']}」の行", "commands": f"種類が「{kinds['commands']}」の行", "bdd": "### [BDD-<番号>] の見出し"}
     missing = [labels[role] for role in REQUIRED_ROLES if not index[role]]
     if missing:
-        raise ValueError("正式な定義に目印が無い: " + ", ".join(missing))
+        raise ValueError("domain-rule資料に目印が無い: " + ", ".join(missing))
     vocabulary = unique(index["terms"] + index["events"] + index["concepts"]
                         + index["state_holders"] + index["states"])
     return {"source_path": str(source), **index, "vocabulary": vocabulary}
