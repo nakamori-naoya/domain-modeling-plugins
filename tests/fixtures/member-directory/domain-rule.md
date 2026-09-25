@@ -10,6 +10,18 @@
 
 # ユビキタス言語
 
+| 業務の言葉 | 英名 | 種類 |
+|---|---|---|
+| 会員 | Member | 業務用語 |
+| 会員番号 | MemberNo | 業務用語 |
+| 氏名 | Name | 業務用語 |
+| 住所 | Address | 業務用語 |
+| 会員が登録された | MemberRegistered | 業務イベント |
+| 住所が変わった | AddressChanged | 業務イベント |
+| 会員を登録する | RegisterMember | コマンド |
+| 住所を変える | ChangeAddress | コマンド |
+| 会員を探す | FindMembers | クエリ |
+
 ## 業務用語
 
 ### 会員

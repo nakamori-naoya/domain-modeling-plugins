@@ -47,14 +47,37 @@ cp "$FIX/domain-rule.md" "$TMP/rule.md"
 source_index "$TMP/rule.md" > "$TMP/index.json" 2>"$TMP/err" && ok "source.py prints the index" || ng "source.py: $(head -3 "$TMP/err")"
 jq -e '(.vocabulary|index("貸出")) and (.vocabulary|index("本が貸し出された")) and (.commands==["本を借りる","本を返す","延滞にする"]) and (.state_holders==["貸出"]) and (.states==["貸出中","延滞","返却済み"]) and (.bdd|length)==13' "$TMP/index.json" >/dev/null \
   && ok "index holds vocabulary, commands (not queries), states, BDD ids" || ng "index content: $(cat "$TMP/index.json")"
-# 反例: 業務の行いの節が無い正式な定義
+# 反例: ユビキタス言語の表にコマンドの行が無い正式な定義
 python3 - "$TMP/rule.md" "$TMP/rule-nocommands.md" <<'PY'
 import sys, re
 t = open(sys.argv[1], encoding="utf-8").read()
-t = re.sub(r"# 業務の行い\n.*?(?=\n# 導出されること)", "", t, flags=re.S)
+t = re.sub(r"^\|[^\n]*\| コマンド \|\n", "", t, flags=re.M)
 open(sys.argv[2], "w", encoding="utf-8").write(t)
 PY
-source_index "$TMP/rule-nocommands.md" >/dev/null 2>"$TMP/err" && ng "missing commands section should fail" || { grep -qF "業務の行い > コマンド" "$TMP/err" && ok "missing commands section is rejected" || ng "diagnostic: $(head -2 "$TMP/err")"; }
+source_index "$TMP/rule-nocommands.md" >/dev/null 2>"$TMP/err" && ng "missing command rows should fail" || { grep -qF "種類が「コマンド」の行" "$TMP/err" && ok "missing command rows are rejected" || ng "diagnostic: $(head -2 "$TMP/err")"; }
+# 反例: ユビキタス言語の表が無い
+python3 - "$TMP/rule.md" "$TMP/rule-notable.md" <<'PY'
+import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+open(sys.argv[2], "w", encoding="utf-8").write(t.replace("| 業務の言葉 | 英名 | 種類 |", "| 語 | 英名 | 種類 |"))
+PY
+source_index "$TMP/rule-notable.md" >/dev/null 2>"$TMP/err" && ng "missing vocabulary table should fail" || { grep -qF "ユビキタス言語の表が0個" "$TMP/err" && ok "missing vocabulary table is rejected" || ng "diagnostic: $(head -2 "$TMP/err")"; }
+# 境界例: 見出しの名前を変えても（結論を入れても）索引は同じ
+python3 - "$TMP/rule.md" "$TMP/rule-headings.md" <<'PY'
+import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+t = t.replace("# 業務の行い\n", "# 利用者と図書館が行うこと\n").replace("# 状態と、その移り変わり\n", "# 貸出は返却で終わる\n").replace("# BDD\n", "# 場面で確かめる\n")
+open(sys.argv[2], "w", encoding="utf-8").write(t)
+PY
+source_index "$TMP/rule-headings.md" > "$TMP/index-headings.json" 2>"$TMP/err" && cmp -s <(jq -S 'del(.source_path)' "$TMP/index.json") <(jq -S 'del(.source_path)' "$TMP/index-headings.json") \
+  && ok "renamed headings give the same index" || ng "renamed headings: $(head -2 "$TMP/err")"
+# 境界例: title の無い状態遷移図は状態を持つものとして数えない
+python3 - "$TMP/rule.md" "$TMP/rule-untitled.md" <<'PY'
+import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+open(sys.argv[2], "w", encoding="utf-8").write(t.replace("---\ntitle: 貸出\n---\n", ""))
+PY
+source_index "$TMP/rule-untitled.md" 2>/dev/null | jq -e '.state_holders==[] and .states==[]' >/dev/null && ok "untitled state diagram is not a state holder" || ng "untitled state diagram"
 # 境界例: 正式な定義のpathが相対、存在しない
 source_index "fixtures/rule.md" >/dev/null 2>&1 && ng "relative source should fail" || ok "relative source path is rejected"
 source_index "$TMP/missing.md" >/dev/null 2>&1 && ng "missing source should fail" || ok "missing source is rejected"
