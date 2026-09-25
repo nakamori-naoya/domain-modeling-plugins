@@ -9,7 +9,7 @@
       "name": "domain-modeling",
       "source": "./plugins/domain-modeling",
       "description": "domain-rule資料から、クラス図と状態遷移図を主役にしたドメインモデル資料を1本保存する",
-      "version": "4.0.0"
+      "version": "5.0.0"
     }
   ]
 }
