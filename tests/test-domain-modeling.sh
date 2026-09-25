@@ -60,8 +60,8 @@ source_index "fixtures/rule.md" >/dev/null 2>&1 && ng "relative source should fa
 source_index "$TMP/missing.md" >/dev/null 2>&1 && ng "missing source should fail" || ok "missing source is rejected"
 
 # ── 検査（verify.py） ─────────────────────────────────────────────
-# 記法の正本は write-doc の domain-model 型の template である。template と playbook の contract の一致は、
-# 兄弟 checkout の write-doc の見本（template と同じ記法で書いた記載例）を verify.py に通して確かめる。見本が無ければ失敗させる。
+# 検査が読む目印は write-doc の公開契約が domain-model 型について宣言する。目印と verify.py の一致は、
+# 兄弟 checkout の write-doc の見本（その目印で書いた記載例）を verify.py に通して確かめる。見本が無ければ失敗させる。
 EXAMPLE="$ROOT/../write-doc-plugins/plugins/write-doc/skills/write-doc/assets/examples/domain-model.example.md"
 if [ -f "$EXAMPLE" ] && python3 "$PB/scripts/verify.py" --playbook "$PB/playbook.yml" --source "$TMP/rule.md" < "$EXAMPLE" >/dev/null 2>"$TMP/err"; then
   ok "write-doc domain-model example passes verify.py"
@@ -107,12 +107,26 @@ expect_error "引数「日付」が、同じ図のクラスのラベルに無い
 # 反例: 関係の線が宣言の無いクラスを結ぶ
 mutate "$TMP/m9.md" '    Loan *-- DueDate' $'    Loan *-- DueDate\n    Loan *-- Ghost'
 expect_error "宣言の無いクラスを結んでいる: Ghost" "$TMP/m9.md"
-# 反例: 集約ルートの節が無い
-mutate "$TMP/m10.md" $'\n## 貸出\n' $'\n## 貸出のこと\n'
-expect_error "正式な定義で状態を持つ「貸出」の「## 貸出」節が無い" "$TMP/m10.md"
-# 反例: 集約の節に、決まった節でもコマンドでもない見出しを立てる（値オブジェクトごとの説明が増える形）
-mutate "$TMP/m11.md" '### 取り違えやすいもの' $'### 貸出状況\n\n借りている冊数と延滞の有無を持つ。\n\n### 取り違えやすいもの'
-expect_error "「### 貸出状況」は" "$TMP/m11.md"
+# 境界例: 見出しの文言は読まない。集約の節の見出しにも小見出しにも結論を入れてよい
+mutate "$TMP/b5.md" $'\n## 貸出\n' $'\n## 貸出の境界は一冊の本に引いた\n'
+expect_ok "$TMP/b5.md" "a concluding H2 for the aggregate section passes"
+mutate "$TMP/b6.md" '### 守ること' '### 同時に借りられたときの上限は、貸出を記録する側が守る'
+expect_ok "$TMP/b6.md" "a concluding H3 inside the aggregate section passes"
+# 境界例: 拒む理由の節は、見出しの最初の「:」より前がコマンド名なら、後ろに結論を書いてよい
+mutate "$TMP/b7.md" '### 本を返す' '### 本を返す: 返却済みの貸出だけを拒む'
+expect_ok "$TMP/b7.md" "a rejection section named before the colon passes"
+# 反例: 拒む理由の節の見出しがコマンド名で始まらない
+mutate "$TMP/m10.md" '### 本を返す' '### 返却済みの貸出は拒む'
+expect_error "拒む理由を書く「### 本を返す」節" "$TMP/m10.md"
+# 反例: 拒む理由の節が、状態遷移図を含む節の外にある
+python3 - "$FIX/domain-model.md" "$TMP/m11.md" <<'PY2'
+import sys, re
+t = open(sys.argv[1], encoding="utf-8").read()
+section = re.search(r"### 本を返す\n.*?(?=### 延滞にする)", t, flags=re.S).group(0)
+t = t.replace(section, "", 1).replace("## 未決\n", "## 未決\n\n" + section, 1)
+open(sys.argv[2], "w", encoding="utf-8").write(t)
+PY2
+expect_error "拒む理由を書く「### 本を返す」節" "$TMP/m11.md"
 # 境界例: コマンドの節は求めない（書くことが無いコマンドの節を消しても通る）
 python3 - "$FIX/domain-model.md" "$TMP/b4.md" <<'PY2'
 import sys, re
@@ -136,13 +150,13 @@ t = open(sys.argv[1], encoding="utf-8").read()
 t = re.sub(r"```mermaid\nstateDiagram-v2\n.*?```\n", "", t, flags=re.S)
 open(sys.argv[2], "w", encoding="utf-8").write(t)
 PY
-expect_error "状態を持つ「貸出」の節に stateDiagram-v2 が無い" "$TMP/m12.md"
+expect_error "正式な定義で状態を持つ「貸出」の状態遷移図が無い" "$TMP/m12.md"
 # 反例: 状態遷移図の状態が正式な定義に無い
 mutate "$TMP/m13.md" '    貸出中 --> 延滞: 延滞にする' '    貸出中 --> 督促中: 延滞にする'
 expect_error "状態「督促中」は正式な定義の状態に無い" "$TMP/m13.md"
 # 反例: 矢印のラベルが業務イベント（コマンドではない）
 mutate "$TMP/m14.md" '    貸出中 --> 延滞: 延滞にする' '    貸出中 --> 延滞: 貸出が延滞になった'
-expect_error "ラベルが、クラス図でこの集約に描いたコマンドではない" "$TMP/m14.md"
+expect_error "ラベル 貸出が延滞になった が、クラス図で集約ルートに描いたコマンドではない" "$TMP/m14.md"
 # 境界例: 終端への矢印はラベル無しでよい
 expect_ok "$FIX/domain-model.md" "unlabeled transition to [*] passes"
 # 反例: 正式な定義に無いBDD番号
@@ -153,9 +167,6 @@ verify "$FIX/domain-model.md" 2>/dev/null | jq -e '.warnings == []' >/dev/null &
 # 境界例: 引かないBDDは失敗ではなく warning
 mutate "$TMP/b2.md" '（BDD-005、BDD-013）' '（BDD-005）'
 verify "$TMP/b2.md" 2>/dev/null | jq -e '.warnings | any(contains("BDD-013"))' >/dev/null && ok "uncited BDD is a warning" || ng "uncited BDD warning"
-# 反例: 提案した語を図に使う
-mutate "$TMP/m16.md" '### 貸出番号' '### 返却期限'
-expect_error "業務知識への提案の語「返却期限」が図のクラスにある" "$TMP/m16.md"
 # 境界例: 提案が無ければ節ごと置かない
 python3 - "$FIX/domain-model.md" "$TMP/b3.md" <<'PY'
 import sys, re
@@ -164,33 +175,29 @@ t = re.sub(r"## 業務知識への提案\n.*?(?=## 未決)", "", t, flags=re.S)
 open(sys.argv[2], "w", encoding="utf-8").write(t)
 PY
 expect_ok "$TMP/b3.md" "no proposal section passes"
-# 反例: 提案の節が表だけで、提案ごとの見出しが無い
-python3 - "$FIX/domain-model.md" "$TMP/m20.md" <<'PY2'
-import sys, re
-t = open(sys.argv[1], encoding="utf-8").read()
-t = re.sub(r"(## 業務知識への提案\n).*?(?=## 未決)", r"\1\n| 提案 | なぜ要るか |\n|---|---|\n| 貸出番号 | 見分けられない |\n\n", t, flags=re.S)
-open(sys.argv[2], "w", encoding="utf-8").write(t)
-PY2
-expect_error "提案ごとの ### 見出しが無い" "$TMP/m20.md"
 # 境界例: 業務の決まりが薄い文脈（会員の住所録）は、クラス図と未決だけで通る
 python3 "$PB/scripts/verify.py" --playbook "$PB/playbook.yml" --source "$ROOT/tests/fixtures/member-directory/domain-rule.md" < "$ROOT/tests/fixtures/member-directory/domain-model.md" >/dev/null 2>"$TMP/err" \
   && ok "thin CRUD context passes with only a class diagram and open questions" || ng "thin CRUD context: $(head -3 "$TMP/err")"
 python3 "$PB/scripts/verify.py" --playbook "$PB/playbook.yml" --source "$ROOT/tests/fixtures/member-directory/domain-rule.md" < "$ROOT/tests/fixtures/member-directory/domain-model.md" 2>/dev/null | jq -e '.warnings == []' >/dev/null \
   && ok "thin context without aggregate sections gets no uncited-BDD warning" || ng "thin context warnings"
-# 反例: 未決が空
-python3 - "$FIX/domain-model.md" "$TMP/m17.md" <<'PY'
+# 反例: classDiagram が無い
+mutate "$TMP/m18.md" $'```mermaid\nclassDiagram' $'```mermaid\nflowchart LR'
+expect_error "Mermaid classDiagram が無い" "$TMP/m18.md"
+# 境界例: クラス図の節の見出しに結論を入れてよい
+mutate "$TMP/b8.md" '## クラス図' '## 集約は貸出一つで、利用者と本は番号で指す'
+expect_ok "$TMP/b8.md" "a concluding H2 for the class diagram passes"
+# 反例: 二つの H2 節に同じ集約の状態遷移図を分ける
+python3 - "$FIX/domain-model.md" "$TMP/m19.md" <<'PY2'
 import sys, re
 t = open(sys.argv[1], encoding="utf-8").read()
-t = re.sub(r"## 未決\n.*", "## 未決\n", t, flags=re.S)
+diagram = re.search(r"```mermaid\nstateDiagram-v2\n.*?```\n", t, flags=re.S).group(0)
+t = t.replace("## 未決\n", "## 未決\n\n" + diagram, 1)
 open(sys.argv[2], "w", encoding="utf-8").write(t)
-PY
-expect_error "「## 未決」の節が無いか空" "$TMP/m17.md"
-# 反例: クラス図の節にclassDiagramが無い
-mutate "$TMP/m18.md" '## クラス図' '## 全体'
-expect_error "「## クラス図」の節に Mermaid classDiagram が無い" "$TMP/m18.md"
-# 反例: 状態遷移図が集約の節の外
-mutate "$TMP/m19.md" '### 状態遷移' '## 状態遷移'
-expect_error "状態遷移図が集約ルートの節の外" "$TMP/m19.md"
+PY2
+expect_error "「貸出」の状態遷移図が二つ以上の H2 節に分かれている" "$TMP/m19.md"
+# 反例: 状態遷移図に、ラベルの無い途中の矢印がある
+mutate "$TMP/m20.md" '    貸出中 --> 延滞: 延滞にする' '    貸出中 --> 延滞'
+expect_error "にコマンドのラベルが無い" "$TMP/m20.md"
 
 # ── 一時file配管を持たない ─────────────────────────────────────────
 yq -o=json -I=0 '.' "$PB/playbook.yml" | jq -e '([.steps[].id]==["index-source","settle","assign","verify","document"]) and ([.steps[]|.provides[]?]|index("work_directory")|not)' >/dev/null \
