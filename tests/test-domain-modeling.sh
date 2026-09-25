@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # model-domain が持つ script（source.py / verify.py）を、正例・反例・境界例で実行する。
-# 入力: domain-rule資料のpath（source.py の build_index）、domain-rule資料のpath＋標準入力の資料本文（verify.py）。
+# 入力: 業務知識の資料のpath（source.py の build_index）、業務知識の資料のpath＋標準入力の資料本文（verify.py）。
 # 正例: fixtures/library-lending/domain-model.md。業務の決まりが薄い境界例: fixtures/member-directory。反例と境界例は正例を1か所ずつ変えて作る。
 # 検査するのは構造の述語であって、モデルの良し悪しではない。
 set -uo pipefail
@@ -51,25 +51,25 @@ PY
   [ $? -eq 0 ] || ng "mutate failed for $out"
 }
 
-cp "$FIX/domain-rule.md" "$TMP/rule.md"
+cp "$FIX/business-knowledge.md" "$TMP/rule.md"
 
 # ── 索引（source.py の build_index） ──────────────────────────────────────────────
 source_index "$TMP/rule.md" > "$TMP/index.json" 2>"$TMP/err" && ok "build_index returns the index" || ng "source.py: $(head -3 "$TMP/err")"
-jq -e '(.vocabulary|index("貸出")) and (.vocabulary|index("本が貸し出された")) and (.commands==["本を借りる","本を返す","延滞にする"]) and (.state_holders==["貸出"]) and (.states==["貸出中","延滞","返却済み"]) and (.bdd|length)==13' "$TMP/index.json" >/dev/null \
+jq -e '(.vocabulary|index("貸出")) and (.vocabulary|index("本を借りた")) and (.commands==["本を借りる","本を返す","延滞にする"]) and (.state_holders==["貸出"]) and (.states==["貸出中","延滞","返却済み"]) and (.bdd|length)==17' "$TMP/index.json" >/dev/null \
   && ok "index holds vocabulary, commands (not queries), states, BDD ids" || ng "index content: $(cat "$TMP/index.json")"
-# 反例: ユビキタス言語の表にコマンドの行が無いdomain-rule資料
+# 反例: ユビキタス言語の表にコマンドの行が無い業務知識の資料（読むだけの業務はドメインモデルの入力にならない）
 python3 - "$TMP/rule.md" "$TMP/rule-nocommands.md" <<'PY'
 import sys, re
 t = open(sys.argv[1], encoding="utf-8").read()
-t = re.sub(r"^\|[^\n]*\| コマンド \|\n", "", t, flags=re.M)
+t = re.sub(r"^\|[^\n]*\| コマンド \|[^\n]*\n", "", t, flags=re.M)
 open(sys.argv[2], "w", encoding="utf-8").write(t)
 PY
-source_index "$TMP/rule-nocommands.md" >/dev/null 2>"$TMP/err" && ng "missing command rows should fail" || { grep -qF "種類が「コマンド」の行" "$TMP/err" && ok "missing command rows are rejected" || ng "diagnostic: $(head -2 "$TMP/err")"; }
+source_index "$TMP/rule-nocommands.md" >/dev/null 2>"$TMP/err" && ng "missing command rows should fail" || { grep -qF "コマンドを持たない業務知識はドメインモデルの入力にならない" "$TMP/err" && ok "missing command rows are rejected" || ng "diagnostic: $(head -2 "$TMP/err")"; }
 # 反例: ユビキタス言語の表が無い
 python3 - "$TMP/rule.md" "$TMP/rule-notable.md" <<'PY'
 import sys
 t = open(sys.argv[1], encoding="utf-8").read()
-open(sys.argv[2], "w", encoding="utf-8").write(t.replace("| 業務の言葉 | 英名 | 種類 |", "| 語 | 英名 | 種類 |"))
+open(sys.argv[2], "w", encoding="utf-8").write(t.replace("| 業務の言葉 | 英名 | 種類 | 持ち主 |", "| 語 | 英名 | 種類 | 持ち主 |"))
 PY
 source_index "$TMP/rule-notable.md" >/dev/null 2>"$TMP/err" && ng "missing vocabulary table should fail" || { grep -qF "ユビキタス言語の表が0個" "$TMP/err" && ok "missing vocabulary table is rejected" || ng "diagnostic: $(head -2 "$TMP/err")"; }
 # 境界例: 見出しの名前を変えても（結論を入れても）索引は同じ
@@ -88,7 +88,7 @@ t = open(sys.argv[1], encoding="utf-8").read()
 open(sys.argv[2], "w", encoding="utf-8").write(t.replace("---\ntitle: 貸出\n---\n", ""))
 PY
 source_index "$TMP/rule-untitled.md" 2>/dev/null | jq -e '.state_holders==[] and .states==[]' >/dev/null && ok "untitled state diagram is not a state holder" || ng "untitled state diagram"
-# 境界例: domain-rule資料のpathが相対、存在しない
+# 境界例: 業務知識の資料のpathが相対、存在しない
 source_index "fixtures/rule.md" >/dev/null 2>&1 && ng "relative source should fail" || ok "relative source path is rejected"
 source_index "$TMP/missing.md" >/dev/null 2>&1 && ng "missing source should fail" || ok "missing source is rejected"
 
@@ -109,7 +109,7 @@ jq -e '.verified==true and (.source_path|endswith("rule.md")) and (.warnings|typ
 expect_error "標準入力が空" "$TMP/empty.md"
 # 反例: 索引に無い語をクラスにする（業務知識の文中にだけ現れる語も同じ）
 mutate "$TMP/m1.md" 'class BorrowerStanding["貸出状況"]' 'class BorrowerStanding["利用者カード"]'
-expect_error "クラス「利用者カード」はdomain-rule資料の索引に無い語" "$TMP/m1.md"
+expect_error "クラス「利用者カード」は業務知識の資料の索引に無い語" "$TMP/m1.md"
 # 反例: 種別が契約に無い
 mutate "$TMP/m2.md" '<<値オブジェクト・文脈共有>>' '<<外部の集約>>'
 expect_error "種別「外部の集約」は契約に無い" "$TMP/m2.md"
@@ -125,12 +125,12 @@ expect_error "に操作がある" "$TMP/m5.md"
 # 反例: 集約ルートにフィールド
 mutate "$TMP/m6.md" '        +本を返す()' $'        +本を返す()\n        -返却期限'
 expect_error "コマンド以外の行がある" "$TMP/m6.md"
-# 反例: コマンドがクエリか、domain-rule資料に無い
+# 反例: コマンドがクエリか、業務知識の資料に無い
 mutate "$TMP/m7.md" '        +本を返す()' $'        +本を返す()\n        +借りている本を確かめる()'
-expect_error "コマンド「借りている本を確かめる」は、domain-rule資料の業務の行いのコマンドに無い" "$TMP/m7.md"
+expect_error "コマンド「借りている本を確かめる」は、業務知識の資料の業務の行いのコマンドに無い" "$TMP/m7.md"
 # 反例: ドメインイベントに中身がある
 mutate "$TMP/m8.md" $'<<ドメインイベント>>\n    }\n    class LoanReturned' $'<<ドメインイベント>>\n        貸出日\n    }\n    class LoanReturned'
-expect_error "ドメインイベント「本が貸し出された」に中身の行がある" "$TMP/m8.md"
+expect_error "ドメインイベント「本を借りた」に中身の行がある" "$TMP/m8.md"
 # 境界例: 取り得る値が限られる値オブジェクトは値の行を持ってよい
 mutate "$TMP/b1.md" $'<<値オブジェクト>>\n    }\n    class BorrowerStanding' $'<<値オブジェクト>>\n        14日後\n    }\n    class BorrowerStanding'
 expect_ok "$TMP/b1.md" "value object may list its possible values"
@@ -183,22 +183,22 @@ t = open(sys.argv[1], encoding="utf-8").read()
 t = re.sub(r"```mermaid\nstateDiagram-v2\n.*?```\n", "", t, flags=re.S)
 open(sys.argv[2], "w", encoding="utf-8").write(t)
 PY
-expect_error "domain-rule資料で状態を持つ「貸出」の状態遷移図が無い" "$TMP/m12.md"
-# 反例: 状態遷移図の状態がdomain-rule資料に無い
+expect_error "業務知識の資料で状態を持つ「貸出」の状態遷移図が無い" "$TMP/m12.md"
+# 反例: 状態遷移図の状態が業務知識の資料に無い
 mutate "$TMP/m13.md" '    貸出中 --> 延滞: 延滞にする' '    貸出中 --> 督促中: 延滞にする'
-expect_error "状態「督促中」はdomain-rule資料の状態に無い" "$TMP/m13.md"
+expect_error "状態「督促中」は業務知識の資料の状態に無い" "$TMP/m13.md"
 # 反例: 矢印のラベルが業務イベント（コマンドではない）
-mutate "$TMP/m14.md" '    貸出中 --> 延滞: 延滞にする' '    貸出中 --> 延滞: 貸出が延滞になった'
-expect_error "ラベル 貸出が延滞になった が、クラス図で集約ルートに描いたコマンドではない" "$TMP/m14.md"
+mutate "$TMP/m14.md" '    貸出中 --> 延滞: 延滞にする' '    貸出中 --> 延滞: 延滞にした'
+expect_error "ラベル 延滞にした が、クラス図で集約ルートに描いたコマンドではない" "$TMP/m14.md"
 # 境界例: 終端への矢印はラベル無しでよい
 expect_ok "$FIX/domain-model.md" "unlabeled transition to [*] passes"
-# 反例: domain-rule資料に無いBDD番号
+# 反例: 業務知識の資料に無いBDD番号
 mutate "$TMP/m15.md" '（BDD-010〜012）' '（BDD-099）'
-expect_error "本文が引くBDD番号がdomain-rule資料に無い: BDD-099" "$TMP/m15.md"
-# 境界例: 「BDD-001〜006」は範囲として引いたことになる
-verify "$FIX/domain-model.md" 2>/dev/null | jq -e '.warnings == []' >/dev/null && ok "BDD ranges count as cited" || ng "BDD range citation"
+expect_error "本文が引くBDD番号が業務知識の資料に無い: BDD-099" "$TMP/m15.md"
+# 境界例: 「BDD-001〜006」は範囲として引いたことになる。引かないのはクエリの BDD-015〜017 だけで、warning に残る
+verify "$FIX/domain-model.md" 2>/dev/null | jq -e '(.warnings | length) == 1 and (.warnings[0] | endswith("BDD-015, BDD-016, BDD-017"))' >/dev/null && ok "BDD ranges count as cited" || ng "BDD range citation"
 # 境界例: 引かないBDDは失敗ではなく warning
-mutate "$TMP/b2.md" '（BDD-005、BDD-013）' '（BDD-005）'
+mutate "$TMP/b2.md" '（BDD-005、BDD-013、BDD-014）' '（BDD-005、BDD-014）'
 verify "$TMP/b2.md" 2>/dev/null | jq -e '.warnings | any(contains("BDD-013"))' >/dev/null && ok "uncited BDD is a warning" || ng "uncited BDD warning"
 # 境界例: 提案が無ければ節ごと置かない
 python3 - "$FIX/domain-model.md" "$TMP/b3.md" <<'PY'
@@ -209,9 +209,9 @@ open(sys.argv[2], "w", encoding="utf-8").write(t)
 PY
 expect_ok "$TMP/b3.md" "no proposal section passes"
 # 境界例: 業務の決まりが薄い文脈（会員の住所録）は、クラス図と未決だけで通る
-python3 "$PB/scripts/verify.py" --source "$ROOT/tests/fixtures/member-directory/domain-rule.md" < "$ROOT/tests/fixtures/member-directory/domain-model.md" >/dev/null 2>"$TMP/err" \
+python3 "$PB/scripts/verify.py" --source "$ROOT/tests/fixtures/member-directory/business-knowledge.md" < "$ROOT/tests/fixtures/member-directory/domain-model.md" >/dev/null 2>"$TMP/err" \
   && ok "thin CRUD context passes with only a class diagram and open questions" || ng "thin CRUD context: $(head -3 "$TMP/err")"
-python3 "$PB/scripts/verify.py" --source "$ROOT/tests/fixtures/member-directory/domain-rule.md" < "$ROOT/tests/fixtures/member-directory/domain-model.md" 2>/dev/null | jq -e '.warnings == []' >/dev/null \
+python3 "$PB/scripts/verify.py" --source "$ROOT/tests/fixtures/member-directory/business-knowledge.md" < "$ROOT/tests/fixtures/member-directory/domain-model.md" 2>/dev/null | jq -e '.warnings == []' >/dev/null \
   && ok "thin context without aggregate sections gets no uncited-BDD warning" || ng "thin context warnings"
 # 反例: classDiagram が無い
 mutate "$TMP/m18.md" $'```mermaid\nclassDiagram' $'```mermaid\nflowchart LR'
