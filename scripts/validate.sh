@@ -19,12 +19,6 @@ python3 "$TOOLS/validate-plugin-repository.py" "$ROOT" || failed=1
 python3 "$TOOLS/validate-plugin-repository.py" --self-test || failed=1
 python3 "$TOOLS/test-hardening.py" --repository "$ROOT" || failed=1
 
-# 公開入口の隣接playbook.yml: version 2、requiresは外部packageだけ、stepsのscriptは入口scripts/配下に実在する。
-pb="$ENTRY/playbook.yml"
-yq -o=json -I=0 '.' "$pb" | jq -e '.version==2 and .name=="model-domain" and (.requires|length>0) and all(.requires[]; type=="object" and ((keys|sort)==["marketplace","plugin"]) and .marketplace!="domain-modeling")' >/dev/null || { echo "[fail] playbook.yml の version / name / requires"; failed=1; }
-while IFS= read -r script; do
-  [ -f "$ENTRY/$script" ] || { echo "[fail] steps が指す script が無い: $script"; failed=1; }
-done < <(yq -o=json -I=0 '.' "$pb" | jq -r '.steps[] | select(.script) | .script')
 # 禁止参照形（root validatorと同じ4 token）が配布物に無い。
 if rg -n -e '\$\{\.' -e '<!-- BEGIN shared:' -e 'CLAUDE_PLUGIN_ROOT' -e 'BUNDLE_ROOT' "$PACKAGE" >/dev/null; then
   echo "[fail] 禁止参照形が配布物に残っている"; failed=1

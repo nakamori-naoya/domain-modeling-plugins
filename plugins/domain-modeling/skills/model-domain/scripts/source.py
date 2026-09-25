@@ -1,40 +1,25 @@
 #!/usr/bin/env python3
 """domain-rule資料から、図に使ってよい語の索引を機械的に抜き出し、標準出力へJSONで返す。
 
-基準資料: write-doc の公開契約が domain-rule について宣言した目印と、同じdirectoryの playbook.yml の contract。
-  読むのは、ユビキタス言語の表（見出し行が contract.vocabulary_table の表）、title を付けた stateDiagram-v2 の Mermaid ブロック、
+目印: write-doc の domain-rule 型の template が「検査が読む目印」に書いた形。
+  読むのは、ユビキタス言語の表（見出し行が VOCABULARY_TABLE の表）、title を付けた stateDiagram-v2 の Mermaid ブロック、
   `### [BDD-<番号>]` の見出しだけで、見出しの名前は読まない。意味の判断はしない。
-索引はfileへ書かない。verify.py は同じ build_index を呼び、domain-rule資料のpathから毎回同じ索引を導く。
-
-  source.py --playbook <同じdirectoryのplaybook.yml> --source <domain-rule資料の絶対path>
-
-exit 0 = 索引を標準出力へ返した / 2 = domain-rule資料が目印を持たない、または読めない（診断は標準エラー）。
+verify.py が build_index を呼び、domain-rule資料のpathから毎回同じ索引を導く。索引はファイルへ書かない。
+domain-rule資料が目印を持たないか読めなければ、build_index は ValueError を送出する。
 """
 
 from __future__ import annotations
 
-import argparse
-import json
 from pathlib import Path
 import re
-import subprocess
-import sys
 
 HEADING = re.compile(r"^(#{1,6})[ ]+(.+?)[ ]*$")
 BDD_ID = re.compile(r"\[(BDD-\d{3,})\]")
 TRANSITION = re.compile(r"^(\[\*\]|[^\s:]+)\s*-->\s*(\[\*\]|[^\s:]+)\s*(?::\s*(.*))?$")
 REQUIRED_ROLES = ("terms", "commands", "bdd")
-
-
-def fail(message: str) -> int:
-    print(f"[error] {message}", file=sys.stderr)
-    return 2
-
-
-def load_yaml(path: Path) -> dict:
-    result = subprocess.run(["yq", "-o=json", "-I=0", ".", str(path)],
-                            check=True, capture_output=True, text=True)
-    return json.loads(result.stdout)
+# ユビキタス言語の表の見出し行と、索引の役ごとの「種類」の値。
+VOCABULARY_TABLE = ["業務の言葉", "英名", "種類"]
+VOCABULARY_KINDS = {"terms": "業務用語", "events": "業務イベント", "concepts": "概念", "commands": "コマンド"}
 
 
 def regular_file(raw: str, label: str) -> Path:
@@ -121,11 +106,10 @@ def unique(words: list[str]) -> list[str]:
     return seen
 
 
-def build_index(playbook_path: Path, source_raw: str) -> dict:
-    """playbook.yml の contract とdomain-rule資料のpathから索引を組み立てる。domain-rule資料が目印を持たなければ ValueError。"""
-    contract = load_yaml(playbook_path)["contract"]
-    header = contract["vocabulary_table"]
-    kinds = contract["vocabulary_kinds"]
+def build_index(source_raw: str) -> dict:
+    """domain-rule資料のpathから索引を組み立てる。domain-rule資料が目印を持たなければ ValueError。"""
+    header = VOCABULARY_TABLE
+    kinds = VOCABULARY_KINDS
     source = regular_file(source_raw, "domain-rule資料")
     prose, blocks = scan(source.read_text(encoding="utf-8"))
 
@@ -162,19 +146,3 @@ def build_index(playbook_path: Path, source_raw: str) -> dict:
                         + index["state_holders"] + index["states"])
     return {"source_path": str(source), **index, "vocabulary": vocabulary}
 
-
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--playbook", required=True)
-    parser.add_argument("--source", required=True)
-    args = parser.parse_args()
-    try:
-        payload = build_index(Path(args.playbook), args.source)
-    except (KeyError, OSError, UnicodeDecodeError, ValueError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
-        return fail(str(exc))
-    print(json.dumps(payload, ensure_ascii=False))
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

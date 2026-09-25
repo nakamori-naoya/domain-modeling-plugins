@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# model-domain が所有する script（source.py / verify.py）を、正例・反例・境界例で実行する。
-# 基準資料: playbook.yml の contract と、domain-rule資料（fixtures/library-lending/domain-rule.md）。
-# 入力: domain-rule資料のpath（source.py）、domain-rule資料のpath＋標準入力の候補本文（verify.py）。
+# model-domain が持つ script（source.py / verify.py）を、正例・反例・境界例で実行する。
+# 入力: domain-rule資料のpath（source.py の build_index）、domain-rule資料のpath＋標準入力の資料本文（verify.py）。
 # 正例: fixtures/library-lending/domain-model.md。業務の決まりが薄い境界例: fixtures/member-directory。反例と境界例は正例を1か所ずつ変えて作る。
 # 検査するのは構造の述語であって、モデルの良し悪しではない。
 set -uo pipefail
@@ -16,8 +15,19 @@ FAIL=0
 
 ok() { echo "  ok: $1"; PASS=$((PASS + 1)); }
 ng() { echo "  NG: $1"; FAIL=$((FAIL + 1)); }
-source_index() { python3 "$PB/scripts/source.py" --playbook "$PB/playbook.yml" --source "$1"; }
-verify() { python3 "$PB/scripts/verify.py" --playbook "$PB/playbook.yml" --source "$TMP/rule.md" < "$1"; }
+source_index() {
+  python3 - "$PB/scripts" "$1" <<'PY'
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from source import build_index
+try:
+    print(json.dumps(build_index(sys.argv[2]), ensure_ascii=False))
+except (OSError, ValueError) as exc:
+    print(f"[error] {exc}", file=sys.stderr)
+    sys.exit(2)
+PY
+}
+verify() { python3 "$PB/scripts/verify.py" --source "$TMP/rule.md" < "$1"; }
 expect_ok() {
   verify "$1" >"$TMP/out" 2>"$TMP/err" && { ok "$2"; return; }
   ng "$2: $(head -3 "$TMP/err")"
@@ -43,8 +53,8 @@ PY
 
 cp "$FIX/domain-rule.md" "$TMP/rule.md"
 
-# ── 索引（source.py） ──────────────────────────────────────────────
-source_index "$TMP/rule.md" > "$TMP/index.json" 2>"$TMP/err" && ok "source.py prints the index" || ng "source.py: $(head -3 "$TMP/err")"
+# ── 索引（source.py の build_index） ──────────────────────────────────────────────
+source_index "$TMP/rule.md" > "$TMP/index.json" 2>"$TMP/err" && ok "build_index returns the index" || ng "source.py: $(head -3 "$TMP/err")"
 jq -e '(.vocabulary|index("貸出")) and (.vocabulary|index("本が貸し出された")) and (.commands==["本を借りる","本を返す","延滞にする"]) and (.state_holders==["貸出"]) and (.states==["貸出中","延滞","返却済み"]) and (.bdd|length)==13' "$TMP/index.json" >/dev/null \
   && ok "index holds vocabulary, commands (not queries), states, BDD ids" || ng "index content: $(cat "$TMP/index.json")"
 # 反例: ユビキタス言語の表にコマンドの行が無いdomain-rule資料
@@ -83,10 +93,10 @@ source_index "fixtures/rule.md" >/dev/null 2>&1 && ng "relative source should fa
 source_index "$TMP/missing.md" >/dev/null 2>&1 && ng "missing source should fail" || ok "missing source is rejected"
 
 # ── 検査（verify.py） ─────────────────────────────────────────────
-# 検査が読む目印は write-doc の公開契約が domain-model 型について宣言する。目印と verify.py の一致は、
+# 検査が読む目印は write-doc の domain-model 型の template が書く。目印と verify.py の一致は、
 # 兄弟 checkout の write-doc の見本（その目印で書いた記載例）を verify.py に通して確かめる。見本が無ければ失敗させる。
 EXAMPLE="$ROOT/../write-doc-plugins/plugins/write-doc/skills/write-doc/assets/examples/domain-model.example.md"
-if [ -f "$EXAMPLE" ] && python3 "$PB/scripts/verify.py" --playbook "$PB/playbook.yml" --source "$TMP/rule.md" < "$EXAMPLE" >/dev/null 2>"$TMP/err"; then
+if [ -f "$EXAMPLE" ] && python3 "$PB/scripts/verify.py" --source "$TMP/rule.md" < "$EXAMPLE" >/dev/null 2>"$TMP/err"; then
   ok "write-doc domain-model example passes verify.py"
 else
   ng "write-doc domain-model example does not pass verify.py: $EXAMPLE $(head -3 "$TMP/err" 2>/dev/null)"
@@ -199,9 +209,9 @@ open(sys.argv[2], "w", encoding="utf-8").write(t)
 PY
 expect_ok "$TMP/b3.md" "no proposal section passes"
 # 境界例: 業務の決まりが薄い文脈（会員の住所録）は、クラス図と未決だけで通る
-python3 "$PB/scripts/verify.py" --playbook "$PB/playbook.yml" --source "$ROOT/tests/fixtures/member-directory/domain-rule.md" < "$ROOT/tests/fixtures/member-directory/domain-model.md" >/dev/null 2>"$TMP/err" \
+python3 "$PB/scripts/verify.py" --source "$ROOT/tests/fixtures/member-directory/domain-rule.md" < "$ROOT/tests/fixtures/member-directory/domain-model.md" >/dev/null 2>"$TMP/err" \
   && ok "thin CRUD context passes with only a class diagram and open questions" || ng "thin CRUD context: $(head -3 "$TMP/err")"
-python3 "$PB/scripts/verify.py" --playbook "$PB/playbook.yml" --source "$ROOT/tests/fixtures/member-directory/domain-rule.md" < "$ROOT/tests/fixtures/member-directory/domain-model.md" 2>/dev/null | jq -e '.warnings == []' >/dev/null \
+python3 "$PB/scripts/verify.py" --source "$ROOT/tests/fixtures/member-directory/domain-rule.md" < "$ROOT/tests/fixtures/member-directory/domain-model.md" 2>/dev/null | jq -e '.warnings == []' >/dev/null \
   && ok "thin context without aggregate sections gets no uncited-BDD warning" || ng "thin context warnings"
 # 反例: classDiagram が無い
 mutate "$TMP/m18.md" $'```mermaid\nclassDiagram' $'```mermaid\nflowchart LR'
@@ -221,10 +231,6 @@ expect_error "「貸出」の状態遷移図が二つ以上の H2 節に分か�
 # 反例: 状態遷移図に、ラベルの無い途中の矢印がある
 mutate "$TMP/m20.md" '    貸出中 --> 延滞: 延滞にする' '    貸出中 --> 延滞'
 expect_error "にコマンドのラベルが無い" "$TMP/m20.md"
-
-# ── 一時file配管を持たない ─────────────────────────────────────────
-yq -o=json -I=0 '.' "$PB/playbook.yml" | jq -e '([.steps[].id]==["index-source","settle","assign","verify","document"]) and ([.steps[]|.provides[]?]|index("work_directory")|not)' >/dev/null \
-  && ok "playbook has the five steps and no work directory" || ng "playbook steps"
 
 echo "domain modeling scripts: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
