@@ -22,13 +22,13 @@ docs/domain/library-lending.md を元に、ドメインモデル資料を作っ�
 domain-rule資料が更新されたので、docs/domain-model/library-lending-model.md を同じパスで更新して。
 ```
 
-## 工程
+## 進め方
 
-`index-source`でdomain-rule資料から図に使える語（業務用語、業務イベント、コマンド、状態、BDD番号）を抜き出す。`settle`で、domain-rule資料だけでは決まらず図の形を変える割り当てを`grill`で確かめる。`assign`で図を先に描き、図で表せないことだけを文章にする。`verify`で図の語と記法の構造を検査する。`document`で`write-doc`の`domain-model`型として保存する。判断の本質は[割り当ての判断](plugins/domain-modeling/skills/model-domain/references/modeling.md)にある。
+domain-rule資料だけでは決まらず図の形を変える割り当てを`grill`で確かめ、`write-doc`の`domain-model`型のtemplateと書くときの規範を読んで、図を先に描き、図で表せないことだけを文章にして保存する。保存した資料に`verify.py`を一回かけ、図の語と記法の構造を確かめる。判断の要は[割り当ての判断](plugins/domain-modeling/skills/model-domain/references/modeling.md)と`SKILL.md`にある。
 
 ## インストール
 
-インストールするのは`domain-modeling@domain-modeling`です。外部の工程を実行するため、`grill@grill`、`write-doc@write-doc`も必要です。下のコマンドには、それらも含めています。domain-rule資料を作る`bdd-discovery-and-formulation@bdd-discovery-and-formulation`は実行時の依存ではないので含めていません。
+インストールするのは`domain-modeling@domain-modeling`です。問いを確かめる`grill@grill`と、templateと書くときの規範を読む`write-doc@write-doc`も必要です。下のコマンドには、それらも含めています。domain-rule資料を作る`bdd-discovery-and-formulation@bdd-discovery-and-formulation`は実行時の依存ではないので含めていません。
 
 ### Codex
 
@@ -80,7 +80,7 @@ claude plugin update domain-modeling@domain-modeling --scope "$CLAUDE_PLUGIN_SCO
 
 ## 公開インストール単位と内包する機能
 
-利用者がインストールするのは`domain-modeling@domain-modeling`だけである。packageは`plugins/domain-modeling/`にあり、公開入口`skills/model-domain/`が`SKILL.md`（目的・入力・判断の本質・手順・停止条件・報告）、`playbook.yml`（工程順・入出力・scriptが読む契約）、`references/modeling.md`（割り当ての判断）、`scripts/`（`source.py`索引、`verify.py`検査）を持つ。設定fileは持たず、保存先は公開入力で受け取る。候補本文はagentがインメモリで保持して検査scriptへ標準入力で渡し、作業directory・一時file・後片付け工程を持たない。
+利用者がインストールするのは`domain-modeling@domain-modeling`だけである。packageは`plugins/domain-modeling/`にあり、公開入口`skills/model-domain/`が`SKILL.md`、`references/modeling.md`（割り当ての判断）、`scripts/`（`source.py`がdomain-rule資料から語の索引を作り、`verify.py`が保存した資料を検査する）を持つ。設定ファイルは持たず、保存先は入力で受け取る。
 
 ## 検証
 
@@ -88,6 +88,4 @@ claude plugin update domain-modeling@domain-modeling --scope "$CLAUDE_PLUGIN_SCO
 bash scripts/validate.sh
 ```
 
-root契約（配置・manifest・隣接playbook.yml・禁止参照形。`../harness-tools/tools/validate-plugin-repository.py`）、保守toolの回帰検査（`../harness-tools/tools/test-hardening.py --repository`）、隣接`playbook.yml`の宣言と`script:`参照の実在、構文、消費側契約lint（`../harness-tools/tools/lint-consumer-contract.py`。実配布物の兄弟checkout `../grill-plugins/plugins/grill` と `../write-doc-plugins/plugins/write-doc` が要る）、所有script（`source.py` / `verify.py`）の典型例・負例・境界例を実行する。保守toolの参照元は兄弟checkout `../harness-tools/` だけで、無ければ検査は止まる（複製も同期機構も持たない）。CIは`.github/workflows/validate.yml`で `harness-tools` と依存providerを兄弟checkoutし、`harness-tools/ci/validate.sh` で同じcommandを実行する。workspace rootの`bash scripts/validate.sh <このrepositoryの絶対path>`は規約入口の検査と同じroot契約を掛ける。
-
-[意味評価fixture](evals/scenarios.json)は`../harness-tools/scripts/run-evals.sh`（`../harness-tools/tools/evaluate-skills.py`）で生成modelと独立judgeへ渡し、入力、応答、criterionごとの逐語quoteとreasonを記録する。runnerのexit 0は全caseの記録完了だけを示し、品質承認を示さない。criterionの真偽は人またはagentが記録を再読して採否を判断するための意味証拠である。adapter非zero、不正な応答、根拠不整合など記録を完了できない操作失敗は非zeroで終了する。
+root契約（`../harness-tools/tools/validate-plugin-repository.py`）、保守toolの回帰検査（`../harness-tools/tools/test-hardening.py --repository`）、構文、消費側契約lint（`../harness-tools/tools/lint-consumer-contract.py`。兄弟checkout `../grill-plugins/plugins/grill` と `../write-doc-plugins/plugins/write-doc` が要る）、`source.py`と`verify.py`の典型例・負例・境界例（`tests/test-domain-modeling.sh`）を実行する。保守toolの参照元は兄弟checkout `../harness-tools/` だけで、無ければ検査は止まる。
