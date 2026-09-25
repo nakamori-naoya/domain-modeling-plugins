@@ -20,10 +20,10 @@ classDiagram
     class Address["住所"] {
         <<値オブジェクト>>
     }
-    class Registered["会員が登録された"] {
+    class Registered["会員を登録した"] {
         <<ドメインイベント>>
     }
-    class Moved["住所が変わった"] {
+    class Moved["住所を変えた"] {
         <<ドメインイベント>>
     }
     Member *-- MemberNo
