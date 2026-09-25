@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""domain-rule資料から、図に使ってよい語の索引を機械的に抜き出し、標準出力へJSONで返す。
+"""業務知識の資料から、図に使ってよい語の索引を機械的に抜き出し、標準出力へJSONで返す。
 
-目印: write-doc の domain-rule 型の template が「検査が読む目印」に書いた形。
+目印: write-doc の business-knowledge 型の template が「検査が読む目印」に書いた形。
   読むのは、ユビキタス言語の表（見出し行が VOCABULARY_TABLE の表）、title を付けた stateDiagram-v2 の Mermaid ブロック、
   `### [BDD-<番号>]` の見出しだけで、見出しの名前は読まない。意味の判断はしない。
-verify.py が build_index を呼び、domain-rule資料のpathから毎回同じ索引を導く。索引はファイルへ書かない。
-domain-rule資料が目印を持たないか読めなければ、build_index は ValueError を送出する。
+  ユビキタス言語の表の持ち主の欄は読まない。ほかの資料が決めた語も、この資料が使う語として索引に入れる。
+verify.py が build_index を呼び、業務知識の資料のpathから毎回同じ索引を導く。索引はファイルへ書かない。
+業務知識の資料が目印を持たないか読めなければ、build_index は ValueError を送出する。
+コマンドの行が無い業務知識（隣の業務の事実を読むだけの業務）は、ドメインモデルの入力にならないので ValueError にする。
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ BDD_ID = re.compile(r"\[(BDD-\d{3,})\]")
 TRANSITION = re.compile(r"^(\[\*\]|[^\s:]+)\s*-->\s*(\[\*\]|[^\s:]+)\s*(?::\s*(.*))?$")
 REQUIRED_ROLES = ("terms", "commands", "bdd")
 # ユビキタス言語の表の見出し行と、索引の役ごとの「種類」の値。
-VOCABULARY_TABLE = ["業務の言葉", "英名", "種類"]
+VOCABULARY_TABLE = ["業務の言葉", "英名", "種類", "持ち主"]
 VOCABULARY_KINDS = {"terms": "業務用語", "events": "業務イベント", "concepts": "概念", "commands": "コマンド"}
 
 
@@ -78,7 +80,7 @@ def vocabulary_rows(prose: list[str], header: list[str]) -> list[dict[str, str]]
             continue
         index += 1
     if len(found) != 1:
-        raise ValueError(f"domain-rule資料に、見出し行が「| {' | '.join(header)} |」のユビキタス言語の表が{len(found)}個ある（1個必要）")
+        raise ValueError(f"業務知識の資料に、見出し行が「| {' | '.join(header)} |」のユビキタス言語の表が{len(found)}個ある（1個必要）")
     return found[0]
 
 
@@ -107,10 +109,10 @@ def unique(words: list[str]) -> list[str]:
 
 
 def build_index(source_raw: str) -> dict:
-    """domain-rule資料のpathから索引を組み立てる。domain-rule資料が目印を持たなければ ValueError。"""
+    """業務知識の資料のpathから索引を組み立てる。業務知識の資料が目印を持たなければ ValueError。"""
     header = VOCABULARY_TABLE
     kinds = VOCABULARY_KINDS
-    source = regular_file(source_raw, "domain-rule資料")
+    source = regular_file(source_raw, "業務知識の資料")
     prose, blocks = scan(source.read_text(encoding="utf-8"))
 
     index: dict = {role: [] for role in kinds}
@@ -139,9 +141,11 @@ def build_index(source_raw: str) -> dict:
     index["bdd"] = unique(ids)
 
     labels = {"terms": f"種類が「{kinds['terms']}」の行", "commands": f"種類が「{kinds['commands']}」の行", "bdd": "### [BDD-<番号>] の見出し"}
+    if not index["commands"]:
+        raise ValueError(f"業務知識の資料に{labels['commands']}が無い。コマンドを持たない業務知識はドメインモデルの入力にならない")
     missing = [labels[role] for role in REQUIRED_ROLES if not index[role]]
     if missing:
-        raise ValueError("domain-rule資料に目印が無い: " + ", ".join(missing))
+        raise ValueError("業務知識の資料に目印が無い: " + ", ".join(missing))
     vocabulary = unique(index["terms"] + index["events"] + index["concepts"]
                         + index["state_holders"] + index["states"])
     return {"source_path": str(source), **index, "vocabulary": vocabulary}
