@@ -88,4 +88,4 @@ claude plugin update domain-modeling@domain-modeling --scope "$CLAUDE_PLUGIN_SCO
 bash scripts/validate.sh
 ```
 
-root契約（`../harness-tools/tools/validate-plugin-repository.py`）、保守toolの回帰検査（`../harness-tools/tools/test-hardening.py --repository`）、構文、消費側契約lint（`../harness-tools/tools/lint-consumer-contract.py`。兄弟checkout `../grill-plugins/plugins/grill` と `../write-doc-plugins/plugins/write-doc` が要る）、`source.py`と`verify.py`の典型例・負例・境界例（`tests/test-domain-modeling.sh`）を実行する。保守toolの参照元は兄弟checkout `../harness-tools/` だけで、無ければ検査は止まる。
+root契約（`../harness-tools/tools/validate-plugin-repository.py`）、保守toolの回帰検査（`../harness-tools/tools/test-hardening.py --repository`）、構文、`source.py`と`verify.py`の典型例・負例・境界例（`tests/test-domain-modeling.sh`）を実行する。保守toolの参照元は兄弟checkout `../harness-tools/` だけで、無ければ検査は止まる。

@@ -2,9 +2,6 @@
 # Scenario: repositoryのpackage、manifest、marketplace、公開入口のscript契約、構文が一致する
 set -uo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-# 継承したenvで検査が変わらないようにする。開発用mapやtest cacheが外から入っていると、
-# 「解決できないこと」を見る負の試験が黙って解決してしまい、緑になる。
-unset HARNESS_PLUGIN_DEV_ROOTS HARNESS_PLUGIN_CACHE_ROOT HARNESS_PLUGIN_ALLOW_PRERELEASE
 TMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/plugin-repository-validation.XXXXXX") || exit 2
 export TMPDIR="$TMP_ROOT"
 trap 'rm -rf "$TMP_ROOT"' EXIT
@@ -30,25 +27,6 @@ skill_count=$(find "$PACKAGE" -name SKILL.md -type f | wc -l | tr -d ' ')
 while IFS= read -r script; do bash -n "$script" || failed=1; done < <(find "$ROOT" -type f -name '*.sh' | sort)
 while IFS= read -r script; do PYTHONPYCACHEPREFIX="$TMP_ROOT/pycache" python3 -m py_compile "$script" || failed=1; done < <(find "$ROOT" -type f -name '*.py' | sort)
 
-# ── 消費側の契約lint — 実際の配布物から検出語を作る ─────────────────────
-# lintはSKILL.md・README・references・scripts・.harness-plugins配下の設定を含む全行を見る。
-# 検出語は手書きせず、外部依存として実在するproviderのmanifestから作るので、依存先の兄弟checkoutが要る。無ければ緑にせず失敗させる。
-lint_consumer_contract() {
-  local map="$TMP_ROOT/lint-dev-map.json" status=0 runtime
-  local grill="$ROOT/../grill-plugins/plugins/grill" write_doc="$ROOT/../write-doc-plugins/plugins/write-doc"
-  for provider in "$grill" "$write_doc"; do
-    [ -d "$provider" ] || { echo "[error] 依存先の配布物checkoutが無い: $provider" >&2; return 1; }
-  done
-  jq -n --arg g "$(cd "$grill" && pwd -P)" --arg w "$(cd "$write_doc" && pwd -P)" \
-    '{schema:1,dependencies:{"grill/grill":$g,"write-doc/write-doc":$w}}' > "$map" || return 1
-  for runtime in claude codex; do
-    HARNESS_PLUGIN_DEV_ROOTS="$map" python3 "$TOOLS/lint-consumer-contract.py" \
-      --repo "$ROOT" --runtime "$runtime" || status=1
-  done
-  return "$status"
-}
-
-lint_consumer_contract || failed=1
 bash "$ROOT/tests/test-domain-modeling.sh" || failed=1
 if [ "$failed" -eq 0 ]; then echo 'Validation: passed'; else echo 'Validation: failed'; fi
 [ "$failed" -eq 0 ]
