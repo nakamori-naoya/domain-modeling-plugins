@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """候補のドメインモデル本文が、図の構造契約を満たすかを検査する。
 
-基準資料: write-doc の公開契約が domain-model 型について宣言した目印（クラス図と状態遷移図の Mermaid 記法、
-  拒む理由の節の見出し、BDD番号）、同じdirectoryの playbook.yml の contract、domain-rule資料（source.py の build_index が索引を導く）。
+目印: write-doc の domain-model 型の template が「検査が読む目印」に書いた形（クラス図と状態遷移図の Mermaid 記法、
+  拒む理由の節の見出し、BDD番号）と、domain-rule資料（source.py の build_index が索引を導く）。
   見出しの文言は読まない。節は、その中にある図と、見出しの先頭のコマンド名で見つける。
-入力: 標準入力の候補本文（Markdown）、--playbook、--source。索引fileも候補fileも受け取らない。
+入力: 標準入力の資料本文（Markdown）と --source。
 正規化: コードフェンスの外の行だけを見出しと本文として読む。```mermaid の中は、先頭の行（classDiagram / stateDiagram-v2）で図の種類を決め、
   空行と %% の注釈行を除く。見出しの `*` `_` と backtick は外して比べる。H3 見出しは、最初の半角 `:` より前を名前として読む。
 合格述語:
@@ -28,7 +28,7 @@
 意味評価として残す範囲: 境界の引き方と集約の数、拒む理由の節が受け付けない状態のすべてを一文ずつ書いているか、文章が図の言い直しになっていないか、
   値オブジェクトの行が業務の語か、未決と業務知識への提案が要るものを漏らしていないか、warnings の本文が引いていないBDDが本当に集約の外で成立するか。
 
-  verify.py --playbook <同じdirectoryのplaybook.yml> --source <domain-rule資料の絶対path>  < <候補本文（Markdown）>
+  verify.py --source <domain-rule資料の絶対path>  < <保存したドメインモデル資料>
 
 exit 0 = 通った（stdoutに verified, source_path, warnings） / 2 = 標準入力が空、domain-rule資料が契約の節を持たない、または述語が成り立たない。
 """
@@ -39,11 +39,10 @@ import argparse
 import json
 from pathlib import Path
 import re
-import subprocess
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from source import HEADING, build_index, load_yaml, strip_markup  # noqa: E402
+from source import HEADING, build_index, strip_markup  # noqa: E402
 
 BDD_REF = re.compile(r"BDD-(\d{3,})(?:〜(?:BDD-)?(\d{3,}))?")
 CLASS_DECL = re.compile(r'^class\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:\["([^"]+)"\])?\s*(\{)?\s*$')
@@ -51,6 +50,11 @@ RELATION = re.compile(r'^([A-Za-z_][A-Za-z0-9_]*)\s*(?:"[^"]*"\s*)?(<\|--|\*--|o
 STEREOTYPE = re.compile(r"^<<(.+)>>$")
 COMMAND = re.compile(r"^\+\s*([^()]+?)\s*\((.*)\)\s*$")
 TRANSITION = re.compile(r"^(\[\*\]|[^\s:]+)\s*-->\s*(\[\*\]|[^\s:]+)\s*(?::\s*(.*))?$")
+ELEMENT_KINDS = ["集約ルート", "エンティティ", "値オブジェクト", "ドメインイベント"]
+# コマンドを書けるのはこの種別だけ。
+COMMAND_HOLDERS = {"集約ルート", "エンティティ"}
+# 複数の文脈で使う値に種別へ添える印。
+SHARED_MARK = "文脈共有"
 
 
 def cited_bdd(line: str) -> list[str]:
@@ -145,15 +149,15 @@ def parse_class_diagram(lines: list[str], errors: list[str]) -> tuple[dict, list
     return classes, relations
 
 
-def check(body: str, index: dict, contract: dict) -> tuple[list[str], list[str]]:
+def check(body: str, index: dict) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
     h2s, diagrams, prose = parse(body)
     vocabulary = set(index["vocabulary"])
     commands_in_source = set(index["commands"])
-    kinds = contract["element_kinds"]
-    holders = set(contract["command_holders"])
-    shared = contract["shared_mark"]
+    kinds = ELEMENT_KINDS
+    holders = COMMAND_HOLDERS
+    shared = SHARED_MARK
 
     # ── クラス図 ──
     class_diagrams = [d for d in diagrams if d["kind"] == "classDiagram"]
@@ -289,17 +293,15 @@ def check(body: str, index: dict, contract: dict) -> tuple[list[str], list[str]]
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--playbook", required=True)
     parser.add_argument("--source", required=True)
     args = parser.parse_args()
     try:
         body = read_stdin()
-        contract = load_yaml(Path(args.playbook))["contract"]
-        index = build_index(Path(args.playbook), args.source)
-    except (Invalid, KeyError, OSError, UnicodeDecodeError, ValueError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        index = build_index(args.source)
+    except (Invalid, OSError, UnicodeDecodeError, ValueError) as exc:
         print(f"[error] {exc}", file=sys.stderr)
         return 2
-    errors, warnings = check(body, index, contract)
+    errors, warnings = check(body, index)
     if errors:
         for message in errors:
             print(f"[error] {message}", file=sys.stderr)
