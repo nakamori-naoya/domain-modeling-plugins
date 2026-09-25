@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # model-domain が所有する script（source.py / verify.py）を、正例・反例・境界例で実行する。
-# 基準資料: playbook.yml の contract と、domain-ruleの正式な定義（fixtures/library-lending/domain-rule.md）。
-# 入力: 正式な定義のpath（source.py）、正式な定義のpath＋標準入力の候補本文（verify.py）。
+# 基準資料: playbook.yml の contract と、domain-rule資料（fixtures/library-lending/domain-rule.md）。
+# 入力: domain-rule資料のpath（source.py）、domain-rule資料のpath＋標準入力の候補本文（verify.py）。
 # 正例: fixtures/library-lending/domain-model.md。業務の決まりが薄い境界例: fixtures/member-directory。反例と境界例は正例を1か所ずつ変えて作る。
 # 検査するのは構造の述語であって、モデルの良し悪しではない。
 set -uo pipefail
@@ -47,7 +47,7 @@ cp "$FIX/domain-rule.md" "$TMP/rule.md"
 source_index "$TMP/rule.md" > "$TMP/index.json" 2>"$TMP/err" && ok "source.py prints the index" || ng "source.py: $(head -3 "$TMP/err")"
 jq -e '(.vocabulary|index("貸出")) and (.vocabulary|index("本が貸し出された")) and (.commands==["本を借りる","本を返す","延滞にする"]) and (.state_holders==["貸出"]) and (.states==["貸出中","延滞","返却済み"]) and (.bdd|length)==13' "$TMP/index.json" >/dev/null \
   && ok "index holds vocabulary, commands (not queries), states, BDD ids" || ng "index content: $(cat "$TMP/index.json")"
-# 反例: ユビキタス言語の表にコマンドの行が無い正式な定義
+# 反例: ユビキタス言語の表にコマンドの行が無いdomain-rule資料
 python3 - "$TMP/rule.md" "$TMP/rule-nocommands.md" <<'PY'
 import sys, re
 t = open(sys.argv[1], encoding="utf-8").read()
@@ -78,7 +78,7 @@ t = open(sys.argv[1], encoding="utf-8").read()
 open(sys.argv[2], "w", encoding="utf-8").write(t.replace("---\ntitle: 貸出\n---\n", ""))
 PY
 source_index "$TMP/rule-untitled.md" 2>/dev/null | jq -e '.state_holders==[] and .states==[]' >/dev/null && ok "untitled state diagram is not a state holder" || ng "untitled state diagram"
-# 境界例: 正式な定義のpathが相対、存在しない
+# 境界例: domain-rule資料のpathが相対、存在しない
 source_index "fixtures/rule.md" >/dev/null 2>&1 && ng "relative source should fail" || ok "relative source path is rejected"
 source_index "$TMP/missing.md" >/dev/null 2>&1 && ng "missing source should fail" || ok "missing source is rejected"
 
@@ -99,7 +99,7 @@ jq -e '.verified==true and (.source_path|endswith("rule.md")) and (.warnings|typ
 expect_error "標準入力が空" "$TMP/empty.md"
 # 反例: 索引に無い語をクラスにする（業務知識の文中にだけ現れる語も同じ）
 mutate "$TMP/m1.md" 'class BorrowerStanding["貸出状況"]' 'class BorrowerStanding["利用者カード"]'
-expect_error "クラス「利用者カード」は正式な定義の索引に無い語" "$TMP/m1.md"
+expect_error "クラス「利用者カード」はdomain-rule資料の索引に無い語" "$TMP/m1.md"
 # 反例: 種別が契約に無い
 mutate "$TMP/m2.md" '<<値オブジェクト・文脈共有>>' '<<外部の集約>>'
 expect_error "種別「外部の集約」は契約に無い" "$TMP/m2.md"
@@ -115,9 +115,9 @@ expect_error "に操作がある" "$TMP/m5.md"
 # 反例: 集約ルートにフィールド
 mutate "$TMP/m6.md" '        +本を返す()' $'        +本を返す()\n        -返却期限'
 expect_error "コマンド以外の行がある" "$TMP/m6.md"
-# 反例: コマンドがクエリか、正式な定義に無い
+# 反例: コマンドがクエリか、domain-rule資料に無い
 mutate "$TMP/m7.md" '        +本を返す()' $'        +本を返す()\n        +借りている本を確かめる()'
-expect_error "コマンド「借りている本を確かめる」は、正式な定義の業務の行いのコマンドに無い" "$TMP/m7.md"
+expect_error "コマンド「借りている本を確かめる」は、domain-rule資料の業務の行いのコマンドに無い" "$TMP/m7.md"
 # 反例: ドメインイベントに中身がある
 mutate "$TMP/m8.md" $'<<ドメインイベント>>\n    }\n    class LoanReturned' $'<<ドメインイベント>>\n        貸出日\n    }\n    class LoanReturned'
 expect_error "ドメインイベント「本が貸し出された」に中身の行がある" "$TMP/m8.md"
@@ -173,18 +173,18 @@ t = open(sys.argv[1], encoding="utf-8").read()
 t = re.sub(r"```mermaid\nstateDiagram-v2\n.*?```\n", "", t, flags=re.S)
 open(sys.argv[2], "w", encoding="utf-8").write(t)
 PY
-expect_error "正式な定義で状態を持つ「貸出」の状態遷移図が無い" "$TMP/m12.md"
-# 反例: 状態遷移図の状態が正式な定義に無い
+expect_error "domain-rule資料で状態を持つ「貸出」の状態遷移図が無い" "$TMP/m12.md"
+# 反例: 状態遷移図の状態がdomain-rule資料に無い
 mutate "$TMP/m13.md" '    貸出中 --> 延滞: 延滞にする' '    貸出中 --> 督促中: 延滞にする'
-expect_error "状態「督促中」は正式な定義の状態に無い" "$TMP/m13.md"
+expect_error "状態「督促中」はdomain-rule資料の状態に無い" "$TMP/m13.md"
 # 反例: 矢印のラベルが業務イベント（コマンドではない）
 mutate "$TMP/m14.md" '    貸出中 --> 延滞: 延滞にする' '    貸出中 --> 延滞: 貸出が延滞になった'
 expect_error "ラベル 貸出が延滞になった が、クラス図で集約ルートに描いたコマンドではない" "$TMP/m14.md"
 # 境界例: 終端への矢印はラベル無しでよい
 expect_ok "$FIX/domain-model.md" "unlabeled transition to [*] passes"
-# 反例: 正式な定義に無いBDD番号
+# 反例: domain-rule資料に無いBDD番号
 mutate "$TMP/m15.md" '（BDD-010〜012）' '（BDD-099）'
-expect_error "本文が引くBDD番号が正式な定義に無い: BDD-099" "$TMP/m15.md"
+expect_error "本文が引くBDD番号がdomain-rule資料に無い: BDD-099" "$TMP/m15.md"
 # 境界例: 「BDD-001〜006」は範囲として引いたことになる
 verify "$FIX/domain-model.md" 2>/dev/null | jq -e '.warnings == []' >/dev/null && ok "BDD ranges count as cited" || ng "BDD range citation"
 # 境界例: 引かないBDDは失敗ではなく warning

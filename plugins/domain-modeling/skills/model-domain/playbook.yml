@@ -1,9 +1,9 @@
-# model-domain — domain-ruleの正式な定義から、クラス図と状態遷移図を主役にしたドメインモデル資料を1本保存する。
+# model-domain — domain-rule資料から、クラス図と状態遷移図を主役にしたドメインモデル資料を1本保存する。
 # 工程順と入出力、scriptが読む契約（contract）だけを持つ。判断規律はSKILL.mdとreferencesが持つ。
-# 候補本文はagentがインメモリで保持し、検査scriptへは標準入力で渡す。索引はscriptが正式な定義のpathから毎回導く。
+# 候補本文はagentがインメモリで保持し、検査scriptへは標準入力で渡す。索引はscriptがdomain-rule資料のpathから毎回導く。
 version: 2
 name: model-domain
-description: domain-ruleの正式な定義を1本受け取り、集約・エンティティ・値オブジェクト・ドメインイベントをクラス図に、状態とコマンドを状態遷移図に描き、図で表せない不変条件・コマンドの契約・何でないかだけを文章にしたドメインモデル資料を1本保存する
+description: domain-rule資料を1本受け取り、集約・エンティティ・値オブジェクト・ドメインイベントをクラス図に、状態とコマンドを状態遷移図に描き、図で表せない不変条件・コマンドの契約・何でないかだけを文章にしたドメインモデル資料を1本保存する
 inputs: [domain_rule_path, user_input, references, existing_document_path, output_directory, name]
 
 requires:
@@ -13,7 +13,7 @@ requires:
 # scriptが読む契約。source.pyはvocabulary_tableとvocabulary_kinds、verify.pyはそれ以外も読む。
 # 候補本文の見出しの文言は契約に置かない。verify.pyは、write-docの公開契約がdomain-model型について宣言した目印だけを読む。
 contract:
-  # 正式な定義（domain-rule）から索引に拾う目印。write-doc の公開契約が domain-rule について宣言する。見出しの名前は読まない。
+  # domain-rule資料から索引に拾う目印。write-doc の公開契約が domain-rule について宣言する。見出しの名前は読まない。
   # ユビキタス言語の表の見出し行と、索引の役ごとの「種類」の値。
   vocabulary_table: [業務の言葉, 英名, 種類]
   vocabulary_kinds:
@@ -30,19 +30,19 @@ contract:
 steps:
   - id: index-source
     script: scripts/source.py
-    purpose: 正式な定義から業務用語・業務イベント・コマンド・概念・状態・BDD番号を機械的に抜き出し、図に使ってよい語の索引として標準出力へ返す
+    purpose: domain-rule資料から業務用語・業務イベント・コマンド・概念・状態・BDD番号を機械的に抜き出し、図に使ってよい語の索引として標準出力へ返す
     needs: [domain_rule_path]
     provides: [source_index]
 
   - id: settle
     playbook: grill
-    purpose: 正式な定義と索引だけでは決まらない割り当て（集約の境界、集合への規則の守り手、状態の分け方、索引に無い語）のうち、図の形を変えるものを利用者へ確かめる
+    purpose: domain-rule資料と索引だけでは決まらない割り当て（集約の境界、集合への規則の守り手、状態の分け方、索引に無い語）のうち、図の形を変えるものを利用者へ確かめる
     needs: [domain_rule_path, user_input, references, source_index]
     provides: [decisions, open_questions]
 
   - id: assign
     agent_work: invoking_agent
-    purpose: 同じagentが正式な定義、索引、決定、未決を一つの文脈で読み、クラス図と状態遷移図を先に描き、図で表せないことだけを文章にした本文をインメモリで作る
+    purpose: 同じagentがdomain-rule資料、索引、決定、未決を一つの文脈で読み、クラス図と状態遷移図を先に描き、図で表せないことだけを文章にした本文をインメモリで作る
     needs: [domain_rule_path, source_index, decisions, open_questions]
     provides: [final_markdown]
 

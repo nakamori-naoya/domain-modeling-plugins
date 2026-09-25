@@ -2,7 +2,7 @@
 """候補のドメインモデル本文が、図の構造契約を満たすかを検査する。
 
 基準資料: write-doc の公開契約が domain-model 型について宣言した目印（クラス図と状態遷移図の Mermaid 記法、
-  拒む理由の節の見出し、BDD番号）、同じdirectoryの playbook.yml の contract、domain-ruleの正式な定義（source.py の build_index が索引を導く）。
+  拒む理由の節の見出し、BDD番号）、同じdirectoryの playbook.yml の contract、domain-rule資料（source.py の build_index が索引を導く）。
   見出しの文言は読まない。節は、その中にある図と、見出しの先頭のコマンド名で見つける。
 入力: 標準入力の候補本文（Markdown）、--playbook、--source。索引fileも候補fileも受け取らない。
 正規化: コードフェンスの外の行だけを見出しと本文として読む。```mermaid の中は、先頭の行（classDiagram / stateDiagram-v2）で図の種類を決め、
@@ -11,14 +11,14 @@
   - classDiagram が1つ以上ある
   - クラスのラベルが索引の語である。種別がちょうど一つで、契約の種別（値オブジェクトなどに「・文脈共有」を添えてよい）である。
     同じラベルの種別が図ごとに食い違わない。関係の線が宣言済みのクラスだけを結ぶ
-  - コマンド（+名前(引数)）は集約ルートとエンティティにだけあり、名前が正式な定義でコマンドとした行い、引数が同じ図のクラスのラベルである。
+  - コマンド（+名前(引数)）は集約ルートとエンティティにだけあり、名前がdomain-rule資料でコマンドとした行い、引数が同じ図のクラスのラベルである。
     集約ルートとエンティティはコマンド以外の行を持たない。値オブジェクトは括弧を含まない行（取り得る値か、判断に使う業務の語）だけを持つ。
     ドメインイベントは何も持たない
   - stateDiagram-v2 は、矢印のラベルがすべて一つの集約ルートのコマンドであり、その図を含む H2 節がその集約の節になる。
     一つの集約の状態遷移図は一つの H2 節にだけあり、一つの H2 節は一つの集約の状態遷移図だけを持つ。状態は索引の状態で、終端への矢印だけラベルを省ける
-  - 正式な定義で状態を持つ集約ルートには、その集約の状態遷移図がある
+  - domain-rule資料で状態を持つ集約ルートには、その集約の状態遷移図がある
   - 状態遷移図で矢印の出ていない状態があるコマンド（生成のコマンドを除く）は、その集約の節の中に、名前がそのコマンドの H3 を持つ（拒む理由の置き場）
-  - 本文が引くBDD番号（「BDD-001〜006」の範囲を含む）が正式な定義にある
+  - 本文が引くBDD番号（「BDD-001〜006」の範囲を含む）がdomain-rule資料にある
 失敗時の診断: 標準エラーへ「[error] <どの要素が、どの述語に反したか>」を1行ずつ。終了code 2。
 正例: tests/fixtures/library-lending（集約一つ、状態あり、提案あり）と tests/fixtures/member-directory（業務の決まりが薄く、クラス図と未決だけ）。
 反例と境界例: tests/test-domain-modeling.sh が正例を1か所ずつ変えて作る（索引外の語、契約外の種別、値オブジェクトの操作、集約ルートのフィールド、
@@ -28,9 +28,9 @@
 意味評価として残す範囲: 境界の引き方と集約の数、拒む理由の節が受け付けない状態のすべてを一文ずつ書いているか、文章が図の言い直しになっていないか、
   値オブジェクトの行が業務の語か、未決と業務知識への提案が要るものを漏らしていないか、warnings の本文が引いていないBDDが本当に集約の外で成立するか。
 
-  verify.py --playbook <同じdirectoryのplaybook.yml> --source <domain-ruleの正式な定義の絶対path>  < <候補本文（Markdown）>
+  verify.py --playbook <同じdirectoryのplaybook.yml> --source <domain-rule資料の絶対path>  < <候補本文（Markdown）>
 
-exit 0 = 通った（stdoutに verified, source_path, warnings） / 2 = 標準入力が空、正式な定義が契約の節を持たない、または述語が成り立たない。
+exit 0 = 通った（stdoutに verified, source_path, warnings） / 2 = 標準入力が空、domain-rule資料が契約の節を持たない、または述語が成り立たない。
 """
 
 from __future__ import annotations
@@ -171,7 +171,7 @@ def check(body: str, index: dict, contract: dict) -> tuple[list[str], list[str]]
         for class_id, cls in classes.items():
             label = cls["label"]
             if label not in vocabulary:
-                errors.append(f"クラス「{label}」は正式な定義の索引に無い語である。要素にせず業務知識への提案へ移す")
+                errors.append(f"クラス「{label}」はdomain-rule資料の索引に無い語である。要素にせず業務知識への提案へ移す")
             stereotypes = [m.group(1) for m in (STEREOTYPE.match(l) for l in cls["body"]) if m]
             if len(stereotypes) != 1:
                 errors.append(f"クラス「{label}」は種別（<<…>>）をちょうど1つ持たない")
@@ -194,7 +194,7 @@ def check(body: str, index: dict, contract: dict) -> tuple[list[str], list[str]]
                         continue
                     name = command.group(1).strip()
                     if name not in commands_in_source:
-                        errors.append(f"クラス「{label}」のコマンド「{name}」は、正式な定義の業務の行いのコマンドに無い")
+                        errors.append(f"クラス「{label}」のコマンド「{name}」は、domain-rule資料の業務の行いのコマンドに無い")
                     if name not in own_commands:
                         own_commands.append(name)
                     for argument in (arg.strip() for arg in command.group(2).split(",")):
@@ -249,7 +249,7 @@ def check(body: str, index: dict, contract: dict) -> tuple[list[str], list[str]]
         for source_state, target_state, command, line in transitions:
             for state in (source_state, target_state):
                 if state != "[*]" and state not in index["states"]:
-                    errors.append(f"「{label}」の状態遷移図の状態「{state}」は正式な定義の状態に無い")
+                    errors.append(f"「{label}」の状態遷移図の状態「{state}」はdomain-rule資料の状態に無い")
             if command is None:
                 if target_state != "[*]":
                     errors.append(f"「{label}」の状態遷移図の矢印「{line}」にコマンドのラベルが無い（終端への矢印だけ省ける）")
@@ -259,7 +259,7 @@ def check(body: str, index: dict, contract: dict) -> tuple[list[str], list[str]]
 
     for label in roots:
         if label in index["state_holders"] and label not in section_of:
-            errors.append(f"正式な定義で状態を持つ「{label}」の状態遷移図が無い")
+            errors.append(f"domain-rule資料で状態を持つ「{label}」の状態遷移図が無い")
             continue
         if label not in section_of:
             continue
@@ -280,10 +280,10 @@ def check(body: str, index: dict, contract: dict) -> tuple[list[str], list[str]]
                 cited.append(ref)
     unknown = [ref for ref in cited if ref not in index["bdd"]]
     if unknown:
-        errors.append("本文が引くBDD番号が正式な定義に無い: " + ", ".join(unknown))
+        errors.append("本文が引くBDD番号がdomain-rule資料に無い: " + ", ".join(unknown))
     uncited = [ref for ref in index["bdd"] if ref not in cited]
     if uncited and section_of:
-        warnings.append("本文が引いていない正式な定義のBDD（集約の外で成立するものか、要素の不足かを読み返す）: " + ", ".join(uncited))
+        warnings.append("本文が引いていないdomain-rule資料のBDD（集約の外で成立するものか、要素の不足かを読み返す）: " + ", ".join(uncited))
     return errors, warnings
 
 

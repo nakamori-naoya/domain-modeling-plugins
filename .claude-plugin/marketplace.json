@@ -3,12 +3,12 @@
   "owner": {
     "name": "NaoyaNakamori"
   },
-  "description": "業務知識・コアドメインの正式な定義から、戦術DDDのドメインモデル資料を作るpackageを配布するmarketplace",
+  "description": "業務知識・コアドメインの資料（domain-rule）から、戦術DDDのドメインモデル資料を作るpackageを配布するmarketplace",
   "plugins": [
     {
       "name": "domain-modeling",
       "source": "./plugins/domain-modeling",
-      "description": "domain-ruleの正式な定義から、クラス図と状態遷移図を主役にしたドメインモデル資料を1本保存する",
+      "description": "domain-rule資料から、クラス図と状態遷移図を主役にしたドメインモデル資料を1本保存する",
       "version": "3.1.0"
     }
   ]
