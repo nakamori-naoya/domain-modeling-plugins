@@ -45,7 +45,7 @@ description: 業務知識・コアドメイン（domain-rule）の正式な定�
 
 3. **assign。** templateの執筆指示に従い、図を先に描き、図で表せないことだけを書く。仮置きした割り当ては該当箇所で仮説と分かるように書き、`## 未決`に論点、仮置き、根拠、採らなかった案を残す。
 
-4. **verify（`scripts/verify.py`）。** 候補本文を標準入力で`python3 scripts/verify.py --playbook playbook.yml --source <domain_rule_path>`へ渡す。scriptは手順1と同じ索引を正式な定義から導き、図の語が索引にあること、種別とコマンドの置き場、状態遷移図の状態と矢印、集約の節の中の見出し、引いたBDD番号、提案の語と図の非重複を検査する。終了code 0なら標準出力に`verified`、`source_path`、`warnings`を返す。終了code 2なら診断（標準エラー）に従って`assign`へ戻り、候補を直す。検査を通すために正式な定義の語を言い換えない。索引に無い語が要るなら、図から外して提案へ移す。渡し方の例:
+4. **verify（`scripts/verify.py`）。** 候補本文を標準入力で`python3 scripts/verify.py --playbook playbook.yml --source <domain_rule_path>`へ渡す。scriptは手順1と同じ索引を正式な定義から導き、図の語が索引にあること、種別とコマンドの置き場、状態遷移図の状態と矢印、状態遷移図を含む節に拒む理由の見出しがあること、引いたBDD番号を検査する。見出しの文言は読まない。終了code 0なら標準出力に`verified`、`source_path`、`warnings`を返す。終了code 2なら診断（標準エラー）に従って`assign`へ戻り、候補を直す。検査を通すために正式な定義の語を言い換えない。索引に無い語が要るなら、図から外して提案へ移す。渡し方の例:
 
    ```bash
    python3 scripts/verify.py --playbook playbook.yml --source /absolute/path/to/domain-rule.md <<'MD'
