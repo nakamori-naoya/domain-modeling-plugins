@@ -10,8 +10,7 @@
   ],
   "metadata": {
     "harness": {
-      "marketplace": "domain-modeling",
-      "contractVersion": 1
+      "marketplace": "domain-modeling"
     }
   },
   "interface": {
