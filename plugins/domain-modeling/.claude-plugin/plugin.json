@@ -1,6 +1,6 @@
 {
   "name": "domain-modeling",
-  "version": "5.0.0",
+  "version": "6.0.0",
   "description": "業務知識の資料から、クラス図と状態遷移図を主役にしたドメインモデル資料を1本保存する",
   "author": {
     "name": "NaoyaNakamori"
