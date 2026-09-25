@@ -1,6 +1,6 @@
 {
   "name": "domain-modeling",
-  "version": "3.1.0",
+  "version": "4.0.0",
   "description": "domain-rule資料から、クラス図と状態遷移図を主役にしたドメインモデル資料を1本保存する",
   "author": {
     "name": "NaoyaNakamori"
