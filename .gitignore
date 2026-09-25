@@ -19,5 +19,4 @@ __pycache__/
 !/README.md
 !/SECURITY.md
 !/.gitignore
-!/evals/
 !/releases/
