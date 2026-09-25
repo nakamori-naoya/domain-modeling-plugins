@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """domain-ruleの正式な定義から、図に使ってよい語の索引を機械的に抜き出し、標準出力へJSONで返す。
 
-正式な定義の見出し名は同じdirectoryの playbook.yml の contract.source_sections が持つ。ここは見出しの名前を知らず、
-その見出しの下の小見出し、状態遷移図の状態、BDD番号を拾うだけで、意味の判断はしない。
+基準資料: write-doc の公開契約が domain-rule について宣言した目印と、同じdirectoryの playbook.yml の contract。
+  読むのは、ユビキタス言語の表（見出し行が contract.vocabulary_table の表）、title を付けた stateDiagram-v2 の Mermaid ブロック、
+  `### [BDD-<番号>]` の見出しだけで、見出しの名前は読まない。意味の判断はしない。
 索引はfileへ書かない。verify.py は同じ build_index を呼び、正式な定義のpathから毎回同じ索引を導く。
 
   source.py --playbook <同じdirectoryのplaybook.yml> --source <domain-ruleの正式な定義の絶対path>
 
-exit 0 = 索引を標準出力へ返した / 2 = 正式な定義が契約の節を持たない、または読めない（診断は標準エラー）。
+exit 0 = 索引を標準出力へ返した / 2 = 正式な定義が目印を持たない、または読めない（診断は標準エラー）。
 """
 
 from __future__ import annotations
@@ -49,50 +50,67 @@ def strip_markup(text: str) -> str:
     return re.sub(r"[*`_]", "", text).strip()
 
 
-def outline(body: str) -> list[dict]:
-    """見出しごとに level, title, lines を並べる。コードブロックの中は見出しに数えない。"""
-    nodes: list[dict] = []
-    in_code = False
+def split_row(line: str) -> list[str]:
+    return [strip_markup(cell) for cell in line.strip().strip("|").split("|")]
+
+
+def scan(body: str) -> tuple[list[str], list[list[str]]]:
+    """コードブロックの外の行と、Mermaid ブロックごとの中身の行を返す。"""
+    prose: list[str] = []
+    blocks: list[list[str]] = []
+    fence: list[str] | None = None
+    language = ""
     for line in body.splitlines():
-        if line.startswith("```"):
-            in_code = not in_code
-        match = None if in_code else HEADING.match(line)
-        if match:
-            nodes.append({"level": len(match.group(1)), "title": strip_markup(match.group(2)), "lines": []})
-        elif nodes:
-            nodes[-1]["lines"].append(line)
-    return nodes
-
-
-def section(nodes: list[dict], title: str) -> tuple[dict, list[dict]] | None:
-    """title と一致する見出しと、その配下（同じ深さ以上の次の見出しまで）を返す。"""
-    for index, node in enumerate(nodes):
-        if node["title"] == title:
-            children = []
-            for child in nodes[index + 1:]:
-                if child["level"] <= node["level"]:
-                    break
-                children.append(child)
-            return node, children
-    return None
-
-
-def diagram_states(lines: list[str]) -> list[str]:
-    """stateDiagram-v2 の遷移の行から、[*] 以外の状態名を順に拾う。"""
-    states: list[str] = []
-    in_diagram = False
-    for line in lines:
         stripped = line.strip()
+        if fence is not None:
+            if stripped.startswith("```"):
+                if language == "mermaid":
+                    blocks.append(fence)
+                fence = None
+            else:
+                fence.append(stripped)
+            continue
         if stripped.startswith("```"):
-            in_diagram = False
+            fence, language = [], stripped[3:].strip()
             continue
-        if stripped == "stateDiagram-v2":
-            in_diagram = True
+        prose.append(line)
+    return prose, blocks
+
+
+def vocabulary_rows(prose: list[str], header: list[str]) -> list[dict[str, str]]:
+    """見出し行が header の表を一つだけ探し、行を返す。無い、二つ以上なら ValueError。"""
+    found: list[list[dict[str, str]]] = []
+    index = 0
+    while index < len(prose):
+        if prose[index].lstrip().startswith("|") and split_row(prose[index]) == header:
+            rows: list[dict[str, str]] = []
+            cursor = index + 2
+            while cursor < len(prose) and prose[cursor].lstrip().startswith("|"):
+                rows.append(dict(zip(header, split_row(prose[cursor]))))
+                cursor += 1
+            found.append(rows)
+            index = cursor
             continue
-        match = TRANSITION.match(stripped) if in_diagram else None
+        index += 1
+    if len(found) != 1:
+        raise ValueError(f"正式な定義に、見出し行が「| {' | '.join(header)} |」のユビキタス言語の表が{len(found)}個ある（1個必要）")
+    return found[0]
+
+
+def titled_state_diagram(block: list[str]) -> tuple[str, list[str]] | None:
+    """`---` `title: <名前>` `---` で始まり stateDiagram-v2 が続くブロックなら (名前, 遷移の状態) を返す。"""
+    content = [line for line in block if line and not line.startswith("%%")]
+    if len(content) < 4 or content[0] != "---" or content[2] != "---" or content[3] != "stateDiagram-v2":
+        return None
+    if not content[1].startswith("title:"):
+        return None
+    holder = content[1][len("title:"):].strip()
+    states: list[str] = []
+    for line in content[4:]:
+        match = TRANSITION.match(line)
         if match:
             states.extend(state for state in match.groups()[:2] if state != "[*]")
-    return states
+    return holder, states
 
 
 def unique(words: list[str]) -> list[str]:
@@ -104,56 +122,42 @@ def unique(words: list[str]) -> list[str]:
 
 
 def build_index(playbook_path: Path, source_raw: str) -> dict:
-    """playbook.yml の contract と正式な定義のpathから索引を組み立てる。正式な定義が契約の節を持たなければ ValueError。"""
+    """playbook.yml の contract と正式な定義のpathから索引を組み立てる。正式な定義が目印を持たなければ ValueError。"""
     contract = load_yaml(playbook_path)["contract"]
-    sections = contract["source_sections"]
+    header = contract["vocabulary_table"]
+    kinds = contract["vocabulary_kinds"]
     source = regular_file(source_raw, "正式な定義")
-    nodes = outline(source.read_text(encoding="utf-8"))
+    prose, blocks = scan(source.read_text(encoding="utf-8"))
 
-    def own_and_children(role: str) -> tuple[dict, list[dict]] | None:
-        return section(nodes, sections[role])
+    index: dict = {role: [] for role in kinds}
+    index.update({"state_holders": [], "states": [], "bdd": []})
+    rows = vocabulary_rows(prose, header)
+    word_column, kind_column = header[0], header[2]
+    for row in rows:
+        for role, kind in kinds.items():
+            if row.get(kind_column) == kind:
+                index[role].append(row.get(word_column, ""))
+    for role in kinds:
+        index[role] = unique(index[role])
+    for block in blocks:
+        found = titled_state_diagram(block)
+        if found:
+            holder, states = found
+            index["state_holders"].append(holder)
+            index["states"].extend(states)
+    index["state_holders"] = unique(index["state_holders"])
+    index["states"] = unique(index["states"])
+    ids: list[str] = []
+    for line in prose:
+        match = HEADING.match(line)
+        if match and len(match.group(1)) == 3:
+            ids.extend(BDD_ID.findall(match.group(2)))
+    index["bdd"] = unique(ids)
 
-    index: dict = {"terms": [], "events": [], "commands": [], "concepts": [],
-                   "state_holders": [], "states": [], "bdd": []}
-
-    def headings_under(role: str, depth: int) -> list[str]:
-        found = own_and_children(role)
-        if not found:
-            return []
-        node, children = found
-        return unique([c["title"] for c in children if c["level"] == node["level"] + depth])
-
-    index["terms"] = headings_under("terms", 1)
-    index["events"] = headings_under("events", 1)
-    index["concepts"] = headings_under("concepts", 1)
-    found = own_and_children("actions")
-    if found:
-        node, children = found
-        in_commands = False
-        for child in children:
-            if child["level"] == node["level"] + 1:
-                in_commands = child["title"] == contract["command_group"]
-            elif child["level"] == node["level"] + 2 and in_commands:
-                index["commands"].append(child["title"])
-        index["commands"] = unique(index["commands"])
-    found = own_and_children("states")
-    if found:
-        node, children = found
-        holders = [c for c in children if c["level"] == node["level"] + 1]
-        index["state_holders"] = unique([c["title"] for c in holders])
-        index["states"] = unique([state for c in holders for state in diagram_states(c["lines"])])
-    found = own_and_children("bdd")
-    if found:
-        node, children = found
-        ids: list[str] = []
-        for text in node["lines"] + [c["title"] for c in children] + [l for c in children for l in c["lines"]]:
-            ids.extend(BDD_ID.findall(text))
-        index["bdd"] = unique(ids)
-
-    labels = {"terms": sections["terms"], "commands": f"{sections['actions']} > {contract['command_group']}", "bdd": sections["bdd"]}
+    labels = {"terms": f"種類が「{kinds['terms']}」の行", "commands": f"種類が「{kinds['commands']}」の行", "bdd": "### [BDD-<番号>] の見出し"}
     missing = [labels[role] for role in REQUIRED_ROLES if not index[role]]
     if missing:
-        raise ValueError("正式な定義に契約の節が無いか空である: " + ", ".join(missing))
+        raise ValueError("正式な定義に目印が無い: " + ", ".join(missing))
     vocabulary = unique(index["terms"] + index["events"] + index["concepts"]
                         + index["state_holders"] + index["states"])
     return {"source_path": str(source), **index, "vocabulary": vocabulary}

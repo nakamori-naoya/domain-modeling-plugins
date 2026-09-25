@@ -15,7 +15,7 @@ description: 業務知識・コアドメイン（domain-rule）の正式な定�
 
 ## 入力
 
-`domain_rule_path`は必須で、domain-ruleの正式な定義の絶対path 1本である。無ければ「どのdomain-rule資料を正式な定義にしますか（絶対path）」、複数なら「どれを正式な定義にしますか。モデルは正式な定義1本につき1本です」と返して止まる。指されたfileが`# 概要`から`# BDD`までの見出しを持たなければ、domain-rule型ではないと返して止まる。
+`domain_rule_path`は必須で、domain-ruleの正式な定義の絶対path 1本である。無ければ「どのdomain-rule資料を正式な定義にしますか（絶対path）」、複数なら「どれを正式な定義にしますか。モデルは正式な定義1本につき1本です」と返して止まる。指されたfileがdomain-rule型かどうかは、手順1の`source.py`が、write-docの公開契約がdomain-ruleについて宣言した目印（ユビキタス言語の表とBDDの見出し）で判定する。
 
 `user_input`は依頼文で、新規か更新か、既知の割り当て方針を含む。`references`は任意で、追加で従う資料の絶対path配列である。手順の最初に読む。相対path、読めないpath、symlinkは契約に反する入力として止まる。
 
@@ -37,7 +37,7 @@ description: 業務知識・コアドメイン（domain-rule）の正式な定�
 
 ## 手順
 
-1. **index-source（`scripts/source.py`）。** `python3 scripts/source.py --playbook playbook.yml --source <domain_rule_path>`を実行する（pathはこのSKILLのdirectory基準）。正式な定義から業務用語、業務イベント、コマンド、概念、状態、BDD番号を抜き出し、終了code 0で標準出力へ索引JSONを返す。`vocabulary`が図のクラスに使える語、`commands`がコマンドに使える語、`states`が状態遷移図に使える状態である。業務用語、業務の行いのコマンド、BDDが無いか空なら終了code 2と診断を標準エラーへ返すので、正式な定義を直してもらうよう報告して止まる。
+1. **index-source（`scripts/source.py`）。** `python3 scripts/source.py --playbook playbook.yml --source <domain_rule_path>`を実行する（pathはこのSKILLのdirectory基準）。正式な定義のユビキタス言語の表、titleを付けた状態遷移図、BDDの見出しから、業務用語、業務イベント、概念、コマンド、状態を持つものと状態、BDD番号を抜き出し、終了code 0で標準出力へ索引JSONを返す。`vocabulary`が図のクラスに使える語、`commands`がコマンドに使える語、`states`が状態遷移図に使える状態である。ユビキタス言語の表が無いか、業務用語、コマンド、BDDが一つも無ければ終了code 2と診断を標準エラーへ返すので、正式な定義を直してもらうよう報告して止まる。
 
 2. **settle（`grill`）。** 答えによって図の形（集約の数と境界、集合への規則の守り手、業務知識の状態をそのまま使えないときの状態の分け方、要素の有無）が変わる割り当てだけを、成果を左右する順に推奨を添えて問う。正式な定義と索引から読み取れることは問わない。
 

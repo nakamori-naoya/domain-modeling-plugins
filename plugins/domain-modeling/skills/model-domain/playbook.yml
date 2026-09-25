@@ -10,19 +10,17 @@ requires:
   - {plugin: grill, marketplace: grill}
   - {plugin: write-doc, marketplace: write-doc}
 
-# scriptが読む契約。source.pyはsource_sections、verify.pyはそれ以外も読む。
+# scriptが読む契約。source.pyはvocabulary_tableとvocabulary_kinds、verify.pyはそれ以外も読む。
 # 候補本文の見出しの文言は契約に置かない。verify.pyは、write-docの公開契約がdomain-model型について宣言した目印だけを読む。
 contract:
-  # 正式な定義（domain-rule）から索引に拾う節。左が索引の役、右が正式な定義の見出し。
-  source_sections:
+  # 正式な定義（domain-rule）から索引に拾う目印。write-doc の公開契約が domain-rule について宣言する。見出しの名前は読まない。
+  # ユビキタス言語の表の見出し行と、索引の役ごとの「種類」の値。
+  vocabulary_table: [業務の言葉, 英名, 種類]
+  vocabulary_kinds:
     terms: 業務用語
     events: 業務イベント
-    actions: 業務の行い
     concepts: 概念
-    states: 状態と、その移り変わり
-    bdd: BDD
-  # 「業務の行い」の下で、コマンドを並べる小見出し。その下の各見出しがコマンドの名前になる。
-  command_group: コマンド
+    commands: コマンド
   element_kinds: [集約ルート, エンティティ, 値オブジェクト, ドメインイベント]
   # コマンドを書けるのはこの種別だけ。
   command_holders: [集約ルート, エンティティ]
