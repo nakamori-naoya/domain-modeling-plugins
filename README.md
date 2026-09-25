@@ -1,34 +1,34 @@
 # Domain Modeling Plugins
 
-業務知識・コアドメイン（domain-rule）の正式な定義を1本受け取り、集約・エンティティ・値オブジェクト・ドメインイベントとその関係をクラス図に、状態とコマンドを状態遷移図に描いたドメインモデル資料を1本保存する、Claude Code/Codex両対応のmarketplaceである。文章は、図だけでは表せないこと（境界の理由、不変条件、コマンドの契約と拒む理由、何でないか）に絞る。
+業務知識・コアドメイン（domain-rule）の資料を1本受け取り、集約・エンティティ・値オブジェクト・ドメインイベントとその関係をクラス図に、状態とコマンドを状態遷移図に描いたドメインモデル資料を1本保存する、Claude Code/Codex両対応のmarketplaceである。文章は、図だけでは表せないこと（境界の理由、不変条件、コマンドの契約と拒む理由、何でないか）に絞る。
 
 ## こんなときに使う
 
 **業務として何が正しいかは確定したが、それを形にするエンジニアが、図を囲んで境界とコマンドを議論したいときに使う。** 実装コードを書く前に、何を集約にし、どの状態でどのコマンドを受け付け、何を拒むかを、少ない図と短い文章で揃える。
 
-同じ正式な定義を読んでも人によって集約の境界が違うとき、上限のような集合への規則を誰が守るかが曖昧なとき、正式な定義に無い語（「〜ロット」「〜マネージャ」）が要素として増えていくときに効く。業務知識の発見・反証、永続化、実装コード、層構成、画面、APIは扱わない。
+同じdomain-rule資料を読んでも人によって集約の境界が違うとき、上限のような集合への規則を誰が守るかが曖昧なとき、domain-rule資料に無い語（「〜ロット」「〜マネージャ」）が要素として増えていくときに効く。業務知識の発見・反証、永続化、実装コード、層構成、画面、APIは扱わない。
 
 ## 公開入口
 
-公開入口は`model-domain`の1つである。domain-ruleの正式な定義の絶対pathを渡すと新しい資料を作り、既存のドメインモデル資料のpathも渡すと、正式な定義の変更が及ぶ箇所だけを同じパスで更新する。正式な定義に無い語や決まりは図に使わず、正式な定義の反証（bddの`formulate-domain`）への提案にする。それでモデルの結論（集約の境界、要素の種別、受け付けるコマンド）が変わるなら止まって提案を返し、変わらないなら提案を資料に残して完成させる。この入口は正式な定義を書き換えない。
+公開入口は`model-domain`の1つである。domain-rule資料の絶対pathを渡すと新しい資料を作り、既存のドメインモデル資料のpathも渡すと、domain-rule資料の変更が及ぶ箇所だけを同じパスで更新する。domain-rule資料に無い語や決まりは図に使わず、domain-rule資料の反証（bddの`formulate-domain`）への提案にする。それでモデルの結論（集約の境界、要素の種別、受け付けるコマンド）が変わるなら止まって提案を返し、変わらないなら提案を資料に残して完成させる。この入口はdomain-rule資料を書き換えない。
 
 ## 利用例
 
 ```text
-docs/domain/library-lending.md を正式な定義に、ドメインモデル資料を作って。
+docs/domain/library-lending.md を元に、ドメインモデル資料を作って。
 ```
 
 ```text
-正式な定義が更新されたので、docs/domain-model/library-lending-model.md を同じパスで更新して。
+domain-rule資料が更新されたので、docs/domain-model/library-lending-model.md を同じパスで更新して。
 ```
 
 ## 工程
 
-`index-source`で正式な定義から図に使える語（業務用語、業務イベント、コマンド、状態、BDD番号）を抜き出す。`settle`で、正式な定義だけでは決まらず図の形を変える割り当てを`grill`で確かめる。`assign`で図を先に描き、図で表せないことだけを文章にする。`verify`で図の語と記法の構造を検査する。`document`で`write-doc`の`domain-model`型として保存する。判断の本質は[割り当ての判断](plugins/domain-modeling/skills/model-domain/references/modeling.md)にある。
+`index-source`でdomain-rule資料から図に使える語（業務用語、業務イベント、コマンド、状態、BDD番号）を抜き出す。`settle`で、domain-rule資料だけでは決まらず図の形を変える割り当てを`grill`で確かめる。`assign`で図を先に描き、図で表せないことだけを文章にする。`verify`で図の語と記法の構造を検査する。`document`で`write-doc`の`domain-model`型として保存する。判断の本質は[割り当ての判断](plugins/domain-modeling/skills/model-domain/references/modeling.md)にある。
 
 ## インストール
 
-インストールするのは`domain-modeling@domain-modeling`です。外部の工程を実行するため、`grill@grill`、`write-doc@write-doc`も必要です。下のコマンドには、それらも含めています。正式な定義を作る`bdd-discovery-and-formulation@bdd-discovery-and-formulation`は実行時の依存ではないので含めていません。
+インストールするのは`domain-modeling@domain-modeling`です。外部の工程を実行するため、`grill@grill`、`write-doc@write-doc`も必要です。下のコマンドには、それらも含めています。domain-rule資料を作る`bdd-discovery-and-formulation@bdd-discovery-and-formulation`は実行時の依存ではないので含めていません。
 
 ### Codex
 

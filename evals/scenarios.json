@@ -7,17 +7,17 @@
       "messages": [
         {
           "role": "user",
-          "content": "図書館の貸出のドメインモデルを作って。正式な定義の資料はどれか分からない。"
+          "content": "図書館の貸出のドメインモデルを作って。domain-rule資料の資料はどれか分からない。"
         }
       ],
       "criteria": [
         {
           "id": "ask-source",
-          "meaning": "正式な定義のdomain-rule資料の絶対pathを1問で確かめ、推測した資料で進めない"
+          "meaning": "domain-rule資料のdomain-rule資料の絶対pathを1問で確かめ、推測した資料で進めない"
         },
         {
           "id": "no-invention",
-          "meaning": "正式な定義を読まずに業務概念を作らない"
+          "meaning": "domain-rule資料を読まずに業務概念を作らない"
         }
       ]
     },
@@ -27,13 +27,13 @@
       "messages": [
         {
           "role": "user",
-          "content": "正式な定義には『貸出上限』と『借りている冊数』があるが、両方とも冊数なので『貸出枠』という値オブジェクトにまとめて。"
+          "content": "domain-rule資料には『貸出上限』と『借りている冊数』があるが、両方とも冊数なので『貸出枠』という値オブジェクトにまとめて。"
         }
       ],
       "criteria": [
         {
           "id": "keep-source-terms",
-          "meaning": "正式な定義に無い『貸出枠』を図の要素にせず、業務知識への提案か未決へ理由付きで残す"
+          "meaning": "domain-rule資料に無い『貸出枠』を図の要素にせず、業務知識への提案か未決へ理由付きで残す"
         },
         {
           "id": "distinguish-by-purpose",
@@ -67,7 +67,7 @@
       "messages": [
         {
           "role": "user",
-          "content": "この正式な定義からテーブル定義とリポジトリのインターフェースまで作って。"
+          "content": "このdomain-rule資料からテーブル定義とリポジトリのインターフェースまで作って。"
         }
       ],
       "criteria": [
