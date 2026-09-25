@@ -11,6 +11,7 @@ requires:
   - {plugin: write-doc, marketplace: write-doc}
 
 # scriptが読む契約。source.pyはsource_sections、verify.pyはそれ以外も読む。
+# 候補本文の見出しの文言は契約に置かない。verify.pyは、write-docの公開契約がdomain-model型について宣言した目印だけを読む。
 contract:
   # 正式な定義（domain-rule）から索引に拾う節。左が索引の役、右が正式な定義の見出し。
   source_sections:
@@ -27,11 +28,6 @@ contract:
   command_holders: [集約ルート, エンティティ]
   # 複数の文脈で使う値に種別へ添える印。
   shared_mark: 文脈共有
-  class_diagram_section: クラス図
-  # 集約ルートの節の中に置いてよい決まった節。これ以外のH3はクラス図に描いたコマンドだけ。
-  aggregate_subsections: [状態遷移, 守ること, 取り違えやすいもの]
-  proposal_section: 業務知識への提案
-  open_questions_section: 未決
 
 steps:
   - id: index-source
@@ -54,7 +50,7 @@ steps:
 
   - id: verify
     script: scripts/verify.py
-    purpose: 候補本文を標準入力で受け、図の語が索引にあること、種別とコマンドの置き場、状態遷移図の状態とコマンド、集約の節の中の見出し、引いたBDD番号、提案の語と図の非重複を構造検査する
+    purpose: 候補本文を標準入力で受け、図の語が索引にあること、種別とコマンドの置き場、状態遷移図の状態とコマンド、状態遷移図を含む節の拒む理由の見出し、引いたBDD番号を構造検査する
     needs: [domain_rule_path, final_markdown]
     provides: [validation_report]
 
