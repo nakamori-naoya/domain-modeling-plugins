@@ -10,7 +10,7 @@
 - boundary-set-rule-owner: PASS
 - boundary-not-aggregate: PASS
 - command-no-check-only: PASS
-- command-missing-arrow-reason: PASS
+- command-missing-arrow-reason: FAIL
 - command-state-from-knowledge: PASS
 - language-from-knowledge: PASS
 - language-english-name: PASS（境目）
@@ -33,3 +33,5 @@ grill-only-shape-changing は、問1と問2の答えに「仮置きではない�
 language-english-name は、業務知識で英名が未定の利用者IDに `UserId` を置いている。図の注記と未決で仮の識別子だと断っているが、候補を業務知識への提案には書いていない。断りがあるので PASS とし、提案に書くことまで求めるかで分かれるので境目とした。
 
 集合への規則（二人の間の重複、フォロー上限、同時に起きたとき）は、どれも「フォローを記録する側」という役割で守り手が書かれ、上限はフォロー中の人数を受け取る形なので、境界と守り手の条件はすべて PASS とした。
+
+command-missing-arrow-reason は、業務知識が拒む理由を持つ「一度もフォローしていない相手のフォローを外す」を、「コマンドを呼ぶ前に呼び手が…拒む」とコマンドの外に置いているので FAIL とした。
