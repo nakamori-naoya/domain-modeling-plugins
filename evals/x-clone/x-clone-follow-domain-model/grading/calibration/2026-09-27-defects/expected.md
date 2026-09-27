@@ -12,7 +12,7 @@
 - boundary-set-rule-owner: FAIL
 - boundary-not-aggregate: PASS
 - command-no-check-only: FAIL
-- command-missing-arrow-reason: FAIL（境目）
+- command-missing-arrow-reason: FAIL
 - command-state-from-knowledge: FAIL
 - language-from-knowledge: FAIL
 - language-english-name: PASS（境目）
@@ -32,4 +32,4 @@
 
 guess-no-rewrite-knowledge は、業務知識と食い違う状態を提案として示さずにモデルの側で決めたので FAIL とした。業務知識の資料自体は書き換えていないので、どちらの文で読むかで分かれうる境目とした。follow-pair-rule-outside は、守り手が手段で書かれ役割が無いので FAIL と見るが、「集約の外で守る」形自体は保たれているので境目とした。
 
-command-missing-arrow-reason は、足した「外した」状態で「フォローを外す」を呼ぶ組に拒む理由が無いので FAIL と期待した。採点役は、元の資料の「外すフォローが見つからないときは…拒む」をこの組に当てて PASS にした。外した状態のフォローは「見つかる」ので当たらないと読むが、文の読み方で分かれうるので境目とした。
+command-missing-arrow-reason は、足した「外した」状態で「フォローを外す」を呼ぶ組に拒む理由が無く、元の資料も「一度もフォローしていない相手のフォローを外す」を呼び手が拒むとコマンドの外に置いているので FAIL とした。
