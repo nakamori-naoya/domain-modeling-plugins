@@ -3,13 +3,13 @@
   "owner": {
     "name": "NaoyaNakamori"
   },
-  "description": "業務知識の資料（business-knowledge）から、戦術DDDのドメインモデル資料を作るpackageを配布するmarketplace",
+  "description": "業務知識と実装の間で判断の持ち主と境界を議論するドメインモデルの叩き台を作るpackageを配布するmarketplace",
   "plugins": [
     {
       "name": "domain-modeling",
       "source": "./plugins/domain-modeling",
-      "description": "業務知識の資料から、クラス図と状態遷移図を主役にしたドメインモデル資料を1本保存する",
-      "version": "6.2.1"
+      "description": "業務知識から実装へ渡す判断の持ち主と一貫性の境界を議論するドメインモデルの叩き台を作る",
+      "version": "6.3.0"
     }
   ]
 }
