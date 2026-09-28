@@ -9,7 +9,7 @@
       "name": "domain-modeling",
       "source": "./plugins/domain-modeling",
       "description": "業務知識から実装へ渡す判断の持ち主と一貫性の境界を議論するドメインモデルの叩き台を作る",
-      "version": "6.3.0"
+      "version": "6.3.1"
     }
   ]
 }
