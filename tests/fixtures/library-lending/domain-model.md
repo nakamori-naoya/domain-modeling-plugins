@@ -4,53 +4,38 @@
 
 ## クラス図
 
-```mermaid
-classDiagram
-    class Loan["貸出"] {
-        <<集約ルート>>
-        +本を借りる(利用者番号, 資料番号, 貸出日時, 貸出状況)
-        +本を返す()
-        +延滞にする(判定日時)
-    }
-    class UserNumber["利用者番号"] {
-        <<値オブジェクト・文脈共有>>
-    }
-    class BookNumber["資料番号"] {
-        <<値オブジェクト・文脈共有>>
-    }
-    class LentAt["貸出日時"] {
-        <<値オブジェクト>>
-    }
-    class DueDate["返却期限"] {
-        <<値オブジェクト>>
-    }
-    class CheckedAt["判定日時"] {
-        <<値オブジェクト>>
-    }
-    class BorrowerStanding["貸出状況"] {
-        <<値オブジェクト>>
-        借りている冊数
-        延滞の貸出があるか
-    }
-    class LoanLent["本を借りた"] {
-        <<ドメインイベント>>
-    }
-    class LoanReturned["本を返した"] {
-        <<ドメインイベント>>
-    }
-    class LoanMarkedOverdue["延滞にした"] {
-        <<ドメインイベント>>
-    }
-    Loan --> UserNumber : 誰の貸出か
-    Loan --> BookNumber : どの一冊か
-    Loan *-- LentAt
-    Loan *-- DueDate
-    Loan ..> BorrowerStanding : 受け取る
-    Loan ..> CheckedAt : 受け取る
-    Loan ..> LoanLent : 発する
-    Loan ..> LoanReturned : 発する
-    Loan ..> LoanMarkedOverdue : 発する
-```
+![判断の持ち主と値の関係](.assets/domain-model-relations.drawio.svg)
+
+<!-- domain-model:elements -->
+
+| 識別子 | 名前 | 種別 |
+| --- | --- | --- |
+| Loan | 貸出 | 集約ルート |
+| UserNumber | 利用者番号 | 値オブジェクト・文脈共有 |
+| BookNumber | 資料番号 | 値オブジェクト・文脈共有 |
+| LentAt | 貸出日時 | 値オブジェクト |
+| DueDate | 返却期限 | 値オブジェクト |
+| CheckedAt | 判定日時 | 値オブジェクト |
+| BorrowerStanding | 貸出状況 | 値オブジェクト |
+| LoanLent | 本を借りた | ドメインイベント |
+| LoanReturned | 本を返した | ドメインイベント |
+| LoanMarkedOverdue | 延滞にした | ドメインイベント |
+
+<!-- domain-model:relations -->
+
+| 関係元 | 関係先 | 種類 | 関係 |
+| --- | --- | --- | --- |
+| Loan | UserNumber | 参照 | 誰の貸出か |
+| Loan | BookNumber | 参照 | どの一冊か |
+| Loan | LentAt | 構成 |  |
+| Loan | DueDate | 構成 |  |
+| Loan | BorrowerStanding | 依存 | 受け取る |
+| Loan | CheckedAt | 依存 | 受け取る |
+| Loan | LoanLent | 依存 | 発する |
+| Loan | LoanReturned | 依存 | 発する |
+| Loan | LoanMarkedOverdue | 依存 | 発する |
+
+貸出状況は、借りている冊数と延滞の貸出の有無を表す。
 
 ## 貸出
 
@@ -58,14 +43,7 @@ classDiagram
 
 ### 状態遷移
 
-```mermaid
-stateDiagram-v2
-    [*] --> 貸出中: 本を借りる
-    貸出中 --> 延滞: 延滞にする
-    貸出中 --> 返却済み: 本を返す
-    延滞 --> 返却済み: 本を返す
-    返却済み --> [*]
-```
+![貸出中から延滞または返却済みへ移る](.assets/domain-model-states.drawio.svg)
 
 ### 守ること
 

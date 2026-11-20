@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """ドメインモデル資料の決定可能な構造だけを検査する。
 
-基準資料: business-knowledge 型資料の `### [BDD-<番号>]` 見出し（source.py）。
+基準資料: write-doc の domain-model 型 template の表の目印と、business-knowledge 型資料の `### [BDD-<番号>]` 見出し（source.py）。
 入力: 標準入力の Markdown 本文と --source で指定する業務知識資料。
-合格述語: classDiagram があり、Mermaid の対象行を読め、書いた種別が template の許す一つの印で、関係の両端が図内で宣言済みで、本文中の BDD 参照が業務知識資料に存在する。
+合格述語: 要素・関係の表が契約の列で一つずつあり、要素の識別子と名前が空でなく識別子が一意で所定の形を満たし、種別と関係の種類が許容値で、関係の両端が宣言済みで、本文中の BDD 参照が業務知識資料に存在し、Mermaid ブロックが無い。
 失敗時の診断: 標準エラーへ違反を1行ずつ出し、終了コード2。
 正例: tests/fixtures/library-lending/domain-model.md、設計候補の仮名や業務知識に未記載のクラスを含む資料。
-反例: classDiagram 欠落・不正な宣言/関係/種別・未宣言要素への関係・未知の BDD 参照。
-意味評価として残す範囲: 仮説が明示されているか、境界や責務、型の選択、業務上の妥当性と十分性。
+反例: 表の欠落・不正な列/識別子/種別/関係の種類・未宣言要素への関係・未知の BDD 参照・Mermaid ブロック。
+意味評価として残す範囲: 図と表の一致、仮説が明示されているか、境界や責務、型の選択、業務上の妥当性と十分性。
 
 これは構造検査であり、ドメインモデルの設計品質を判定しない。
 """
@@ -24,9 +24,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from source import bdd_ids, regular_file  # noqa: E402
 
 BDD_REF = re.compile(r"BDD-(\d{3,})(?:〜(?:BDD-)?(\d{3,}))?")
-CLASS_DECL = re.compile(r'^class\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s*\["([^"\n]+)"\])?\s*(\{)?\s*$')
-MEMBER = re.compile(r"^(?:[+\-#~]?\s*)?(?:[A-Za-z_][A-Za-z0-9_]*|[ぁ-んァ-ヶ一-龠々ー][^(){}:]*)(?:\s*\([^()]*\))?(?:\s*:\s*[A-Za-z_][A-Za-z0-9_<>, .\[\]]*)?$")
-STEREOTYPES = {"集約ルート", "エンティティ", "値オブジェクト", "ドメインイベント", "ドメインサービス", "値オブジェクト・文脈共有"}
+IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+STEREOTYPES = {"", "集約ルート", "エンティティ", "値オブジェクト", "ドメインイベント", "ドメインサービス", "値オブジェクト・文脈共有"}
+RELATION_KINDS = {"参照", "依存", "構成", "集約", "継承", "実現", "関連"}
 
 
 def references(line: str) -> list[str]:
@@ -38,85 +38,75 @@ def references(line: str) -> list[str]:
     return refs
 
 
-def diagrams(body: str) -> tuple[list[list[str]], list[str]]:
-    classes: list[list[str]] = []
-    prose: list[str] = []
-    fence: list[str] | None = None
-    language = ""
-    for line in body.splitlines():
-        if fence is not None:
-            if line.startswith("```"):
-                content = [entry.strip() for entry in fence if entry.strip() and not entry.strip().startswith("%%")]
-                if language == "mermaid" and content and content[0] == "classDiagram":
-                    classes.append(content[1:])
-                fence = None
-            else:
-                fence.append(line)
-            continue
-        if line.startswith("```"):
-            fence, language = [], line[3:].strip()
-        else:
-            prose.append(line)
-    return classes, prose
-
-
-def validate_class_diagram(lines: list[str]) -> list[str]:
+def prose_lines(body: str) -> tuple[list[str], list[str]]:
+    lines: list[str] = []
     errors: list[str] = []
-    declared: set[str] = set()
-    relations: list[tuple[str, str]] = []
-    current: str | None = None
-    has_stereotype = False
-    for line in lines:
-        if current is not None:
-            if line == "}":
-                current = None
-                has_stereotype = False
-            elif line.startswith("<<") and line.endswith(">>") and len(line) > 4:
-                stereotype = line[2:-2]
-                if stereotype not in STEREOTYPES:
-                    errors.append(f"classDiagram の種別が契約に無い: {stereotype}")
-                if has_stereotype:
-                    errors.append(f"classDiagram の種別が一つの要素に二つある: {current}")
-                has_stereotype = True
-            elif MEMBER.fullmatch(line):
-                continue
-            else:
-                errors.append(f"classDiagram のクラス本文を読めない: {line}")
+    fence: str | None = None
+    for line in body.splitlines():
+        match = re.match(r"^\s*(`{3,}|~{3,})(.*)$", line)
+        if fence is not None:
+            if match and match[1][0] == fence[0] and len(match[1]) >= len(fence) and not match[2].strip():
+                fence = None
             continue
-        declaration = CLASS_DECL.fullmatch(line)
-        if declaration:
-            identifier, _label, opens = declaration.groups()
-            if identifier in declared:
-                errors.append(f"classDiagram で同じ要素を重複宣言している: {identifier}")
-            declared.add(identifier)
-            current = identifier if opens else None
-            has_stereotype = False
-            continue
-        relation = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)\s+(?:"[^"]*"\s*)?(<\|--|\*--|o--|-->|<--|\.\.>|<\.\.|--\*|--o|--\|>|\.\.\|>|--|\.\.)\s*(?:"[^"]*"\s*)?([A-Za-z_][A-Za-z0-9_]*)(?:\s*:\s*.+)?$', line)
-        if relation:
-            relations.append((relation.group(1), relation.group(3)))
-            continue
-        if line in {"direction TB", "direction BT", "direction LR", "direction RL"}:
-            continue
-        errors.append(f"classDiagram の行を読めない: {line}")
-    if current is not None:
-        errors.append(f"classDiagram のクラス本文が閉じていない: {current}")
-    if not declared:
-        errors.append("classDiagram に要素宣言が無い")
-    for left, right in relations:
-        for identifier in (left, right):
-            if identifier not in declared:
-                errors.append(f"classDiagram の関係が未宣言要素を参照している: {identifier}")
-    return errors
+        if match:
+            fence = match[1]
+            if match[2].strip() == "mermaid":
+                errors.append("Mermaid のブロックは置けない")
+        else:
+            lines.append(line)
+    return lines, errors
+
+
+def table(lines: list[str], marker: str, headers: list[str], errors: list[str]) -> list[list[str]]:
+    positions = [i for i, line in enumerate(lines) if line.strip() == f"<!-- domain-model:{marker} -->"]
+    if len(positions) != 1:
+        errors.append(f"表の目印は一つ必要: domain-model:{marker}")
+        return []
+    index = positions[0] + 1
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+    rows: list[list[str]] = []
+    while index < len(lines) and lines[index].strip().startswith("|"):
+        line = lines[index].strip()
+        if not line.endswith("|"):
+            errors.append(f"表の行の末尾に縦棒が無い: {line}")
+        rows.append([cell.strip() for cell in line[1:-1].split("|")])
+        index += 1
+    if len(rows) < 2 or rows[0] != headers or len(rows[1]) != len(headers) or not all(re.fullmatch(r":?-{3,}:?", cell) for cell in rows[1]):
+        errors.append(f"表の見出しまたは区切り行が不正: domain-model:{marker}")
+        return []
+    valid: list[list[str]] = []
+    for row in rows[2:]:
+        if len(row) != len(headers):
+            errors.append(f"表の列数が不正: domain-model:{marker}: {row}")
+        else:
+            valid.append(row)
+    return valid
 
 
 def check(body: str, source_path: str) -> tuple[list[str], list[str]]:
-    errors: list[str] = []
-    class_diagrams, prose = diagrams(body)
-    if not class_diagrams:
-        errors.append("Mermaid classDiagram が無い")
-    for lines in class_diagrams:
-        errors.extend(validate_class_diagram(lines))
+    prose, errors = prose_lines(body)
+    elements = table(prose, "elements", ["識別子", "名前", "種別"], errors)
+    relations = table(prose, "relations", ["関係元", "関係先", "種類", "関係"], errors)
+    declared: set[str] = set()
+    if not elements:
+        errors.append("要素の表に要素宣言が無い")
+    for identifier, label, stereotype in elements:
+        if not IDENTIFIER.fullmatch(identifier):
+            errors.append(f"要素の識別子が不正: {identifier}")
+        if identifier in declared:
+            errors.append(f"要素を重複宣言している: {identifier}")
+        declared.add(identifier)
+        if not label:
+            errors.append(f"要素の名前が空: {identifier}")
+        if stereotype not in STEREOTYPES:
+            errors.append(f"種別が契約に無い: {stereotype}")
+    for left, right, kind, _label in relations:
+        if kind not in RELATION_KINDS:
+            errors.append(f"関係の種類が契約に無い: {kind}")
+        for identifier in (left, right):
+            if identifier not in declared:
+                errors.append(f"関係が未宣言要素を参照している: {identifier}")
     known_bdd = bdd_ids(regular_file(source_path, "業務知識の資料"))
     for line in prose:
         for reference in references(line):

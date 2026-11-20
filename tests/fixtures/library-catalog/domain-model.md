@@ -4,29 +4,28 @@
 
 ## 判断に使う値と結果
 
-```mermaid
-classDiagram
-    class LibraryCatalog["蔵書案内"] {
-        <<ドメインサービス>>
-        +資料を探す(案内対象, 関心分野)
-    }
-    class CatalogCandidate["案内対象"] {
-        <<値オブジェクト>>
-    }
-    class BookNumber["資料番号"] {
-        <<値オブジェクト・文脈共有>>
-    }
-    class Subject["分野"] {
-        <<値オブジェクト・文脈共有>>
-    }
-    class Interest["関心分野"] {
-        <<値オブジェクト>>
-    }
-    LibraryCatalog ..> CatalogCandidate : 選ぶ
-    LibraryCatalog ..> Interest : 受け取る
-    CatalogCandidate --> Subject : 分野
-    CatalogCandidate --> BookNumber : 資料番号
-```
+![判断の持ち主と値の関係](.assets/domain-model-relations.drawio.svg)
+
+<!-- domain-model:elements -->
+
+| 識別子 | 名前 | 種別 |
+| --- | --- | --- |
+| LibraryCatalog | 蔵書案内 | ドメインサービス |
+| CatalogCandidate | 案内対象 | 値オブジェクト |
+| BookNumber | 資料番号 | 値オブジェクト・文脈共有 |
+| Subject | 分野 | 値オブジェクト・文脈共有 |
+| Interest | 関心分野 | 値オブジェクト |
+
+<!-- domain-model:relations -->
+
+| 関係元 | 関係先 | 種類 | 関係 |
+| --- | --- | --- | --- |
+| LibraryCatalog | CatalogCandidate | 依存 | 選ぶ |
+| LibraryCatalog | Interest | 依存 | 受け取る |
+| CatalogCandidate | Subject | 参照 | 分野 |
+| CatalogCandidate | BookNumber | 参照 | 資料番号 |
+
+蔵書案内は案内対象と関心分野を受けて資料を探す。
 
 ## 選択と順序
 
